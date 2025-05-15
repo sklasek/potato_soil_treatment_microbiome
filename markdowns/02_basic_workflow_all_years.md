@@ -127,7 +127,7 @@ mn.its <- subset_taxa(mn.its, (Phylum!="Anthophyta"))
 plot.libsize(mn.its)+ggtitle("MN ITS library sizes")
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
 ``` r
 # prune samples below 10k reads
@@ -295,7 +295,7 @@ ggplot(countrank[1:100,], aes(rank, sumcounts))+
   theme_bw()
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
 ``` r
 # write out 
@@ -347,7 +347,7 @@ plot_ordination(mn.its, mn.its.ord, color="year", title="MN1 ITS")+
   theme_bw()
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
 
 ``` r
 # variation by treatment, 2022 only
@@ -357,7 +357,7 @@ ord2 <- plot_ordination(subset_samples(mn.its, year == 22), mn.its.ord.2022, col
 ord1+ord2
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-6-2.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-6-2.png)<!-- -->
 
 ``` r
 # when does it start to change?
@@ -367,7 +367,7 @@ ord4 <- plot_ordination(subset_samples(mn.its, year == 20), mn.its.ord.2020, col
 ord3+ord4
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-6-3.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-6-3.png)<!-- -->
 
 MN1 Fall 2018: One cluster of ITS communities. In 2019, they vary
 seasonally (spring vs summer differences within potato, which are
@@ -396,7 +396,7 @@ plot_ordination(id.its, id.its.ord, color="year", title="ITS")+
   theme_bw()
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ``` r
 # variation by treatment, 2022 only
@@ -406,7 +406,7 @@ ord6 <- plot_ordination(subset_samples(id.its, year == 22), id.its.ord.2022, col
 ord5+ord6
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
 
 ``` r
 # when does it start to change?
@@ -420,7 +420,7 @@ us.its.ord.3yr <- hell.bc.ord(subset_samples(us.its, rotation == 3 & year == 22)
 plot_ordination(subset_samples(us.its, rotation == 3 & year == 22), us.its.ord.3yr, color="treatment_category", title="treatments (3-yr rotations only)")+theme_bw()
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-7-3.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-7-3.png)<!-- -->
 
 CO ITS communities changed by year and season, but not really by
 rotation or treatment.
@@ -510,7 +510,7 @@ view(MN.16S@sam_data)
 plot.libsize(MN.16S)+ggtitle("MN 16S library sizes")
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 ``` r
 # prune samples below 10k reads
@@ -684,7 +684,7 @@ plot_ordination(MN.16S, MN.16S.ord, color="year", title="MN1 16S")+
   theme_bw()
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
 ``` r
 # variation by treatment, 2022 only
@@ -694,7 +694,7 @@ ord10 <- plot_ordination(subset_samples(MN.16S, year == 22), MN.16S.ord.2022, co
 ord9+ord10
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-11-2.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-11-2.png)<!-- -->
 MN: year and season influence 16S, but rotation and treatments do not.
 
 #### Other sites
@@ -741,7 +741,7 @@ ord14 <- plot_ordination(subset_samples(OR.16S, year == 21), OR.16S.ord, color="
 ord13+ord14
 ```
 
-![](36_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](02_basic_workflow_all_years_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 CO: 16S communities vary by year, and by *something* else, but it does
 not appear to be rotation, season, cultivar, or treatment. ID: Varies by
@@ -788,13 +788,13 @@ and changed both ITS/16S.
 sessionInfo()
 ```
 
-    ## R version 4.3.2 (2023-10-31)
-    ## Platform: aarch64-apple-darwin20 (64-bit)
-    ## Running under: macOS Sonoma 14.0
+    ## R version 4.4.3 (2025-02-28)
+    ## Platform: x86_64-apple-darwin20
+    ## Running under: macOS Sonoma 14.7.5
     ## 
     ## Matrix products: default
-    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.3-arm64/Resources/lib/libRblas.0.dylib 
-    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.3-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.11.0
+    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib 
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
     ## 
     ## locale:
     ## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
@@ -806,36 +806,36 @@ sessionInfo()
     ## [1] stats     graphics  grDevices utils     datasets  methods   base     
     ## 
     ## other attached packages:
-    ##  [1] NatParksPalettes_0.2.0 vegan_2.6-4            lattice_0.22-5        
-    ##  [4] permute_0.9-7          patchwork_1.2.0        speedyseq_0.5.3.9018  
-    ##  [7] phyloseq_1.46.0        lubridate_1.9.3        forcats_1.0.0         
-    ## [10] stringr_1.5.1          dplyr_1.1.4            purrr_1.0.2           
-    ## [13] readr_2.1.5            tidyr_1.3.0            tibble_3.2.1          
-    ## [16] ggplot2_3.4.4          tidyverse_2.0.0       
+    ##  [1] NatParksPalettes_0.2.0 vegan_2.6-10           lattice_0.22-6        
+    ##  [4] permute_0.9-7          patchwork_1.3.0        speedyseq_0.5.3.9021  
+    ##  [7] phyloseq_1.50.0        lubridate_1.9.4        forcats_1.0.0         
+    ## [10] stringr_1.5.1          dplyr_1.1.4            purrr_1.0.4           
+    ## [13] readr_2.1.5            tidyr_1.3.1            tibble_3.2.1          
+    ## [16] ggplot2_3.5.1          tidyverse_2.0.0       
     ## 
     ## loaded via a namespace (and not attached):
-    ##  [1] ade4_1.7-22             tidyselect_1.2.0        farver_2.1.1           
-    ##  [4] Biostrings_2.70.2       bitops_1.0-7            fastmap_1.1.1          
-    ##  [7] RCurl_1.98-1.14         digest_0.6.34           timechange_0.2.0       
-    ## [10] lifecycle_1.0.4         cluster_2.1.6           survival_3.5-7         
-    ## [13] magrittr_2.0.3          compiler_4.3.2          rlang_1.1.3            
-    ## [16] tools_4.3.2             igraph_2.0.1.1          utf8_1.2.4             
-    ## [19] yaml_2.3.8              data.table_1.14.10      knitr_1.45             
-    ## [22] labeling_0.4.3          plyr_1.8.9              withr_3.0.0            
-    ## [25] BiocGenerics_0.48.1     grid_4.3.2              stats4_4.3.2           
-    ## [28] fansi_1.0.6             multtest_2.58.0         biomformat_1.30.0      
-    ## [31] colorspace_2.1-0        Rhdf5lib_1.24.1         scales_1.3.0           
-    ## [34] iterators_1.0.14        MASS_7.3-60.0.1         cli_3.6.2              
-    ## [37] rmarkdown_2.25          crayon_1.5.2            generics_0.1.3         
-    ## [40] rstudioapi_0.15.0       reshape2_1.4.4          tzdb_0.4.0             
-    ## [43] ape_5.7-1               rhdf5_2.46.1            zlibbioc_1.48.0        
-    ## [46] splines_4.3.2           parallel_4.3.2          XVector_0.42.0         
-    ## [49] vctrs_0.6.5             Matrix_1.6-5            jsonlite_1.8.8         
-    ## [52] IRanges_2.36.0          hms_1.1.3               S4Vectors_0.40.2       
-    ## [55] foreach_1.5.2           glue_1.7.0              codetools_0.2-19       
-    ## [58] stringi_1.8.3           gtable_0.3.4            GenomeInfoDb_1.38.5    
-    ## [61] munsell_0.5.0           pillar_1.9.0            htmltools_0.5.7        
-    ## [64] rhdf5filters_1.14.1     GenomeInfoDbData_1.2.11 R6_2.5.1               
-    ## [67] evaluate_0.23           Biobase_2.62.0          highr_0.10             
-    ## [70] Rcpp_1.0.12             nlme_3.1-164            mgcv_1.9-1             
-    ## [73] xfun_0.41               pkgconfig_2.0.3
+    ##  [1] ade4_1.7-23             tidyselect_1.2.1        farver_2.1.2           
+    ##  [4] Biostrings_2.74.1       fastmap_1.2.0           digest_0.6.36          
+    ##  [7] timechange_0.3.0        lifecycle_1.0.4         cluster_2.1.8          
+    ## [10] survival_3.8-3          magrittr_2.0.3          compiler_4.4.3         
+    ## [13] rlang_1.1.4             tools_4.4.3             igraph_2.1.4           
+    ## [16] utf8_1.2.4              yaml_2.3.8              data.table_1.17.0      
+    ## [19] knitr_1.47              labeling_0.4.3          plyr_1.8.9             
+    ## [22] withr_3.0.2             BiocGenerics_0.52.0     grid_4.4.3             
+    ## [25] stats4_4.4.3            fansi_1.0.6             multtest_2.62.0        
+    ## [28] biomformat_1.34.0       colorspace_2.1-1        Rhdf5lib_1.28.0        
+    ## [31] scales_1.3.0            iterators_1.0.14        MASS_7.3-64            
+    ## [34] cli_3.6.3               rmarkdown_2.27          crayon_1.5.3           
+    ## [37] generics_0.1.3          rstudioapi_0.17.1       httr_1.4.7             
+    ## [40] reshape2_1.4.4          tzdb_0.4.0              ape_5.8-1              
+    ## [43] rhdf5_2.50.2            zlibbioc_1.52.0         splines_4.4.3          
+    ## [46] parallel_4.4.3          XVector_0.46.0          vctrs_0.6.5            
+    ## [49] Matrix_1.7-2            jsonlite_1.8.8          IRanges_2.40.1         
+    ## [52] hms_1.1.3               S4Vectors_0.44.0        foreach_1.5.2          
+    ## [55] glue_1.7.0              codetools_0.2-20        stringi_1.8.4          
+    ## [58] gtable_0.3.6            GenomeInfoDb_1.42.3     UCSC.utils_1.2.0       
+    ## [61] munsell_0.5.1           pillar_1.9.0            htmltools_0.5.8.1      
+    ## [64] rhdf5filters_1.18.1     GenomeInfoDbData_1.2.13 R6_2.5.1               
+    ## [67] evaluate_1.0.3          Biobase_2.66.0          highr_0.11             
+    ## [70] Rcpp_1.0.14             nlme_3.1-167            mgcv_1.9-1             
+    ## [73] xfun_0.45               pkgconfig_2.0.3
