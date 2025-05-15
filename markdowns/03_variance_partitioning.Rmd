@@ -1,7 +1,7 @@
 ---
 title: "adventures in variance partitioning"
 author: "Scott Klasek"
-date: "2024-06-10"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: github_document
 ---
 ## Purpose

@@ -1,7 +1,7 @@
 adventures in variance partitioning
 ================
 Scott Klasek
-2024-06-10
+15 May, 2025
 
 ## Purpose
 
@@ -28,9 +28,9 @@ invisible(lapply(packages, require, character.only = TRUE))
     ## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
     ## ✔ dplyr     1.1.4     ✔ readr     2.1.5
     ## ✔ forcats   1.0.0     ✔ stringr   1.5.1
-    ## ✔ ggplot2   3.5.0     ✔ tibble    3.2.1
-    ## ✔ lubridate 1.9.3     ✔ tidyr     1.3.0
-    ## ✔ purrr     1.0.2     
+    ## ✔ ggplot2   3.5.1     ✔ tibble    3.2.1
+    ## ✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+    ## ✔ purrr     1.0.4     
     ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
     ## ✖ dplyr::filter() masks stats::filter()
     ## ✖ dplyr::lag()    masks stats::lag()
@@ -536,6 +536,12 @@ us.its.22.vp <- its.list.22[["US.ITS.ps"]] %>% variance_partition(formula_US)
 its.list.22.noB <- list(its.list.22[["ID.ITS.ps"]], its.list.22[["MI.ITS.ps"]], its.list.22[["MN.ITS.ps"]])
 its.list.22.B <- list(its.list.22[["ME.ITS.ps"]], its.list.22[["ND.ITS.ps"]], its.list.22[["OR.ITS.ps"]])
 noB.list.22.vp <- map(its.list.22.noB, variance_partition, formula_noB)
+```
+
+    ## Warning in .fitExtractVarPartModel(exprObj, formula, data, REML = REML, : Model failed for 9 responses.
+    ##   See errors with attr(., 'errors')
+
+``` r
 B.list.22.vp <- map(its.list.22.B, variance_partition, formula_B)
 
 # 16S
@@ -545,6 +551,15 @@ us.bact.22.vp <- bact.list.22[["US.16S.ps"]] %>% variance_partition(formula_US)
 bact.list.22.noB <- list(bact.list.22[["ID.16S.ps"]], bact.list.22[["MI.16S.ps"]], bact.list.22[["MN.16S.ps"]])
 bact.list.22.B <- list(bact.list.22[["ME.16S.ps"]], bact.list.22[["ND.16S.ps"]], bact.list.22[["OR.16S.ps"]])
 noB.bact.list.22.vp <- map(bact.list.22.noB, variance_partition, formula_noB)
+```
+
+    ## Warning in .fitExtractVarPartModel(exprObj, formula, data, REML = REML, : Model failed for 49 responses.
+    ##   See errors with attr(., 'errors')
+
+    ## Warning in .fitExtractVarPartModel(exprObj, formula, data, REML = REML, : Model failed for 1 responses.
+    ##   See errors with attr(., 'errors')
+
+``` r
 B.bact.list.22.vp <- map(bact.list.22.B, variance_partition, formula_B)
 ```
 
@@ -653,7 +668,7 @@ ggplot(var.df.l, aes(site, variance_pct, fill = factor))+
     ## Warning: Removed 9 rows containing missing values or values outside the scale range
     ## (`geom_bar()`).
 
-![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](03_variance_partitioning_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
 
 ``` r
 ### 16S
@@ -748,7 +763,7 @@ ggplot(bact.var.df.l, aes(site, variance_pct, fill = factor))+
     ## Warning: Removed 9 rows containing missing values or values outside the scale range
     ## (`geom_bar()`).
 
-![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-6-2.png)<!-- -->
+![](03_variance_partitioning_files/figure-gfm/unnamed-chunk-6-2.png)<!-- -->
 
 ``` r
 # export variance df out
@@ -781,7 +796,7 @@ Minnesota ITS as an example
 plotPercentBars(noB.list.22.vp[[3]][1:50,]) 
 ```
 
-![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](03_variance_partitioning_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ``` r
 ### plot which phyla are most affected by fumigation
@@ -805,7 +820,7 @@ plot_biomarkers(its.list[["MN.ITS.ps"]], fumigatedtrueasvs, "Phylum")+
     ## Scale for y is already present.
     ## Adding another scale for y, which will replace the existing scale.
 
-![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
+![](03_variance_partitioning_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
 
 1)  Variance in the relative abundance of the top 50 ASVs is attributed
     to different factors in different proportions.
@@ -1100,7 +1115,7 @@ mn.corr <- canCorPairs(formula_noB, data.frame(its.list.22[["MN.ITS.ps"]]@sam_da
 plotCorrMatrix(mn.corr)
 ```
 
-![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](03_variance_partitioning_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ``` r
 mn.corr
@@ -1149,7 +1164,7 @@ df <- merge(noB.list.22.vp[[2]], data.frame(meanclr), by = 'row.names')
 ggplot(df, aes(meanclr, Residuals))+geom_point(size = 0.2)
 ```
 
-![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](03_variance_partitioning_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 Kinda yeah, but the effect seems to be binary: low-abundance ASVs vs
 more prominent ones. Maybe this justifies a more stringent occupancy
@@ -1165,7 +1180,7 @@ hist(noB.list.22.vp[[3]] %>% pull(FumigatedTRUE), breaks = 100,
      main = "MN1 ITS ASVs", xlab = "fraction of variance from AmendedTRUE", ylab = "ASV count")
 ```
 
-![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](03_variance_partitioning_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 There does not seem to be a good cutoff point for determining how much
 variance should categorize an ASV as “differentially distributed” across
 any of these factors here.
@@ -1194,13 +1209,13 @@ Additionally, we could look at Genus or other taxonomic levels.
 sessionInfo()
 ```
 
-    ## R version 4.3.2 (2023-10-31)
-    ## Platform: aarch64-apple-darwin20 (64-bit)
-    ## Running under: macOS Sonoma 14.4.1
+    ## R version 4.4.3 (2025-02-28)
+    ## Platform: x86_64-apple-darwin20
+    ## Running under: macOS Sonoma 14.7.5
     ## 
     ## Matrix products: default
-    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.3-arm64/Resources/lib/libRblas.0.dylib 
-    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.3-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.11.0
+    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib 
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
     ## 
     ## locale:
     ## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
@@ -1212,47 +1227,48 @@ sessionInfo()
     ## [1] stats     graphics  grDevices utils     datasets  methods   base     
     ## 
     ## other attached packages:
-    ##  [1] compositions_2.0-8       variancePartition_1.32.2 BiocParallel_1.36.0     
-    ##  [4] limma_3.58.1             NatParksPalettes_0.2.0   patchwork_1.2.0         
-    ##  [7] speedyseq_0.5.3.9018     phyloseq_1.46.0          lubridate_1.9.3         
+    ##  [1] compositions_2.0-8       variancePartition_1.36.3 BiocParallel_1.40.0     
+    ##  [4] limma_3.62.2             NatParksPalettes_0.2.0   patchwork_1.3.0         
+    ##  [7] speedyseq_0.5.3.9021     phyloseq_1.50.0          lubridate_1.9.4         
     ## [10] forcats_1.0.0            stringr_1.5.1            dplyr_1.1.4             
-    ## [13] purrr_1.0.2              readr_2.1.5              tidyr_1.3.0             
-    ## [16] tibble_3.2.1             ggplot2_3.5.0            tidyverse_2.0.0         
+    ## [13] purrr_1.0.4              readr_2.1.5              tidyr_1.3.1             
+    ## [16] tibble_3.2.1             ggplot2_3.5.1            tidyverse_2.0.0         
     ## 
     ## loaded via a namespace (and not attached):
-    ##   [1] Rdpack_2.6              bitops_1.0-7            permute_0.9-7          
-    ##   [4] rlang_1.1.3             magrittr_2.0.3          ade4_1.7-22            
-    ##   [7] matrixStats_1.2.0       compiler_4.3.2          mgcv_1.9-1             
+    ##   [1] Rdpack_2.6.4            bitops_1.0-9            permute_0.9-7          
+    ##   [4] rlang_1.1.4             magrittr_2.0.3          ade4_1.7-23            
+    ##   [7] matrixStats_1.5.0       compiler_4.4.3          mgcv_1.9-1             
     ##  [10] vctrs_0.6.5             reshape2_1.4.4          pkgconfig_2.0.3        
-    ##  [13] crayon_1.5.2            fastmap_1.1.1           backports_1.4.1        
-    ##  [16] XVector_0.42.0          labeling_0.4.3          caTools_1.18.2         
-    ##  [19] utf8_1.2.4              rmarkdown_2.25          tzdb_0.4.0             
-    ##  [22] nloptr_2.0.3            bit_4.0.5               xfun_0.41              
-    ##  [25] zlibbioc_1.48.0         GenomeInfoDb_1.38.8     jsonlite_1.8.8         
-    ##  [28] biomformat_1.30.0       EnvStats_2.8.1          highr_0.10             
-    ##  [31] remaCor_0.0.16          rhdf5filters_1.14.1     Rhdf5lib_1.24.1        
-    ##  [34] broom_1.0.5             parallel_4.3.2          cluster_2.1.6          
-    ##  [37] R6_2.5.1                stringi_1.8.3           boot_1.3-28.1          
-    ##  [40] numDeriv_2016.8-1.1     Rcpp_1.0.12             iterators_1.0.14       
-    ##  [43] knitr_1.45              IRanges_2.36.0          Matrix_1.6-5           
-    ##  [46] splines_4.3.2           igraph_2.0.3            timechange_0.2.0       
-    ##  [49] tidyselect_1.2.0        rstudioapi_0.15.0       yaml_2.3.8             
-    ##  [52] vegan_2.6-4             gplots_3.1.3.1          codetools_0.2-19       
-    ##  [55] lmerTest_3.1-3          lattice_0.22-5          plyr_1.8.9             
-    ##  [58] Biobase_2.62.0          withr_3.0.0             evaluate_0.23          
-    ##  [61] survival_3.5-7          bayesm_3.1-6            Biostrings_2.70.3      
-    ##  [64] pillar_1.9.0            tensorA_0.36.2.1        KernSmooth_2.23-22     
-    ##  [67] foreach_1.5.2           stats4_4.3.2            generics_0.1.3         
-    ##  [70] vroom_1.6.5             RCurl_1.98-1.14         S4Vectors_0.40.2       
-    ##  [73] hms_1.1.3               munsell_0.5.0           scales_1.3.0           
-    ##  [76] aod_1.3.3               minqa_1.2.6             gtools_3.9.5           
-    ##  [79] RhpcBLASctl_0.23-42     glue_1.7.0              tools_4.3.2            
-    ##  [82] fANCOVA_0.6-1           robustbase_0.99-2       data.table_1.14.10     
-    ##  [85] lme4_1.1-35.1           mvtnorm_1.2-4           rhdf5_2.46.1           
-    ##  [88] grid_4.3.2              ape_5.7-1               rbibutils_2.2.16       
-    ##  [91] colorspace_2.1-0        nlme_3.1-164            GenomeInfoDbData_1.2.11
-    ##  [94] cli_3.6.2               fansi_1.0.6             corpcor_1.6.10         
-    ##  [97] DEoptimR_1.1-3          gtable_0.3.4            digest_0.6.34          
-    ## [100] BiocGenerics_0.48.1     pbkrtest_0.5.2          farver_2.1.1           
-    ## [103] htmltools_0.5.7         multtest_2.58.0         lifecycle_1.0.4        
-    ## [106] statmod_1.5.0           bit64_4.0.5             MASS_7.3-60.0.1
+    ##  [13] crayon_1.5.3            fastmap_1.2.0           backports_1.5.0        
+    ##  [16] XVector_0.46.0          labeling_0.4.3          caTools_1.18.3         
+    ##  [19] utf8_1.2.4              rmarkdown_2.27          tzdb_0.4.0             
+    ##  [22] nloptr_2.2.1            UCSC.utils_1.2.0        bit_4.6.0              
+    ##  [25] xfun_0.45               zlibbioc_1.52.0         GenomeInfoDb_1.42.3    
+    ##  [28] jsonlite_1.8.8          biomformat_1.34.0       EnvStats_3.1.0         
+    ##  [31] highr_0.11              remaCor_0.0.18          rhdf5filters_1.18.1    
+    ##  [34] Rhdf5lib_1.28.0         broom_1.0.7             parallel_4.4.3         
+    ##  [37] cluster_2.1.8           R6_2.5.1                stringi_1.8.4          
+    ##  [40] boot_1.3-31             numDeriv_2016.8-1.1     Rcpp_1.0.14            
+    ##  [43] iterators_1.0.14        knitr_1.47              IRanges_2.40.1         
+    ##  [46] Matrix_1.7-2            splines_4.4.3           igraph_2.1.4           
+    ##  [49] timechange_0.3.0        tidyselect_1.2.1        rstudioapi_0.17.1      
+    ##  [52] yaml_2.3.8              vegan_2.6-10            gplots_3.2.0           
+    ##  [55] codetools_0.2-20        lmerTest_3.1-3          lattice_0.22-6         
+    ##  [58] plyr_1.8.9              Biobase_2.66.0          withr_3.0.2            
+    ##  [61] evaluate_1.0.3          survival_3.8-3          bayesm_3.1-6           
+    ##  [64] Biostrings_2.74.1       pillar_1.9.0            tensorA_0.36.2.1       
+    ##  [67] KernSmooth_2.23-26      foreach_1.5.2           stats4_4.4.3           
+    ##  [70] reformulas_0.4.1        generics_0.1.3          vroom_1.6.5            
+    ##  [73] S4Vectors_0.44.0        hms_1.1.3               munsell_0.5.1          
+    ##  [76] scales_1.3.0            aod_1.3.3               minqa_1.2.8            
+    ##  [79] gtools_3.9.5            RhpcBLASctl_0.23-42     glue_1.7.0             
+    ##  [82] tools_4.4.3             fANCOVA_0.6-1           robustbase_0.99-4-1    
+    ##  [85] data.table_1.17.0       lme4_1.1-37             mvtnorm_1.3-3          
+    ##  [88] rhdf5_2.50.2            grid_4.4.3              ape_5.8-1              
+    ##  [91] rbibutils_2.3           colorspace_2.1-1        nlme_3.1-167           
+    ##  [94] GenomeInfoDbData_1.2.13 cli_3.6.3               fansi_1.0.6            
+    ##  [97] corpcor_1.6.10          DEoptimR_1.1-3-1        gtable_0.3.6           
+    ## [100] digest_0.6.36           BiocGenerics_0.52.0     pbkrtest_0.5.4         
+    ## [103] farver_2.1.2            htmltools_0.5.8.1       multtest_2.62.0        
+    ## [106] lifecycle_1.0.4         httr_1.4.7              statmod_1.5.0          
+    ## [109] bit64_4.6.0-1           MASS_7.3-64
