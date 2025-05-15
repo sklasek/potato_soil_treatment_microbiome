@@ -1,7 +1,7 @@
 SEM
 ================
 Scott Klasek
-25 February, 2025
+15 May, 2025
 
 ## Purpose
 
@@ -28,8 +28,8 @@ invisible(lapply(packages, require, character.only = TRUE))
     ## ✔ dplyr     1.1.4     ✔ readr     2.1.5
     ## ✔ forcats   1.0.0     ✔ stringr   1.5.1
     ## ✔ ggplot2   3.5.1     ✔ tibble    3.2.1
-    ## ✔ lubridate 1.9.3     ✔ tidyr     1.3.1
-    ## ✔ purrr     1.0.2     
+    ## ✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+    ## ✔ purrr     1.0.4     
     ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
     ## ✖ dplyr::filter() masks stats::filter()
     ## ✖ dplyr::lag()    masks stats::lag()
@@ -466,7 +466,7 @@ plot.biomarkers(ps1, union(or.amd.bact.2yr.asvs, or.amd.bact.3yr.asvs), "ASV")+
   theme(axis.text.x = element_blank())
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ``` r
 ### idaho 3-yr bacterial consortium
@@ -489,8 +489,8 @@ id.3yr.amd.bact.gg <- plot.biomarkers(ps2, unique(id.amd.bact.3yr.asvs), "ASV")+
 id.3yr.amd.bact.gg
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-10-2.png)<!-- --> In
-both OR and ID, amendments stimulate these ASVs in the second potato
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-10-2.png)<!-- -->
+In both OR and ID, amendments stimulate these ASVs in the second potato
 year and increase their combined relative abundances from ~0.1% to
 ~0.3-0.4% of the community.
 
@@ -539,7 +539,7 @@ plot.biomarkers(ps3, or.brs.bact.3yr.asvs, "ASV")+
   theme(axis.text.x = element_blank())
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 These brassica-ASVs are all negatively-associated with yield, and
 clearly only in the second potato year.
@@ -568,7 +568,7 @@ plot.biomarkers(ps4, me.its.amd.asvs, "ASV")+
   theme(axis.text.x = element_blank())
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 These Ascomycete fungi increased over the two potato growing years, but
 were already higher in the first year. Notice though that their
@@ -598,7 +598,7 @@ plot.biomarkers(ps5, mi.its.amd.asvs, "ASV")+
   theme(axis.text.x = element_blank())
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 These euks in MI increased with treatment and time, but seemed to have
 had a bit of a head start in 2019.
@@ -691,28 +691,28 @@ df1$consortium <- rowSums(df1[,startsWith(colnames(df1), "ASV")])
 ggplot(df1, aes(Amended, Total.yield))+geom_jitter(width = 0.1) # yes
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ``` r
 # is consortium higher in amended? 
 ggplot(df1, aes(Amended, consortium))+geom_jitter(width = 0.2) # yes
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-16-2.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-16-2.png)<!-- -->
 
 ``` r
 # is OM higher in amended?
 ggplot(df1, aes(Amended, OM....))+geom_jitter(width = 0.1) # yes (one outlier)
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-16-3.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-16-3.png)<!-- -->
 
 ``` r
 # also Solvita, pH, P were noticeably higher in amended
 ggplot(df1, aes(Amended, Solvita..ppm.))+geom_jitter(width = 0.1) # yes
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-16-4.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-16-4.png)<!-- -->
 
 ``` r
 # convert amended treatment to 0/1
@@ -1177,21 +1177,21 @@ df2 <- df2 %>% filter(cultivar == "Norkotah")
 ggplot(df2, aes(Amended, Total.yield))+geom_jitter(width = 0.1) # yeah
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ``` r
 # is consortium higher in amended? 
 ggplot(df2, aes(Amended, consortium))+geom_jitter(width = 0.2) # yes
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-18-2.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-18-2.png)<!-- -->
 
 ``` r
 # is OM higher in amended?
 ggplot(df2, aes(Amended, OM....))+geom_jitter(width = 0.1) # yes 
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-18-3.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-18-3.png)<!-- -->
 
 ``` r
 # convert amended treatment to 0/1
@@ -1719,21 +1719,21 @@ df3$cultivar <- ifelse(df3$cultivar == "Burbank", 0,
 ggplot(df3, aes(Amended, Total.yield))+geom_jitter(width = 0.1) # yeah
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ``` r
 # is consortium higher in amended? 
 ggplot(df3, aes(Amended, consortium))+geom_jitter(width = 0.2) # yes
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-19-2.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-19-2.png)<!-- -->
 
 ``` r
 # is OM higher in amended?
 ggplot(df3, aes(Amended, OM....))+geom_jitter(width = 0.1) # maybe a little bit
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-19-3.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-19-3.png)<!-- -->
 
 ``` r
 # convert amended treatment to 0/1
@@ -1891,6 +1891,11 @@ df4 %>% select_if(is.numeric) %>%
   pull(var) # none
 ```
 
+    ## Registered S3 methods overwritten by 'broom':
+    ##   method        from 
+    ##   nobs.fitdistr MuMIn
+    ##   nobs.multinom MuMIn
+
     ## character(0)
 
 ``` r
@@ -1986,7 +1991,7 @@ plot.biomarkers(ps10, mi.amd.its.spring.asvs, "ASV")+
   theme(axis.text.x = element_blank())
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 In MI 3-yr ITS spring, the four ASVs together didn’t make a valid model,
 as amendment didn’t even increase the consortium. Plotting their %
@@ -2402,7 +2407,7 @@ by.treatment.gg <- ggplot(sem_summ, aes(treatment, fill = label))+
 by.site.gg + by.treatment.gg + plot_layout(guides = "collect", widths = c(8,3))
 ```
 
-![](45_SEM_stuff_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](07_microbiome_models_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ## Conclusions
 
@@ -2439,13 +2444,13 @@ fumigation-associated ASVs decreased them in both Minnesota sites.
 sessionInfo()
 ```
 
-    ## R version 4.4.1 (2024-06-14)
-    ## Platform: aarch64-apple-darwin20
-    ## Running under: macOS Sonoma 14.7.3
+    ## R version 4.4.3 (2025-02-28)
+    ## Platform: x86_64-apple-darwin20
+    ## Running under: macOS Sonoma 14.7.5
     ## 
     ## Matrix products: default
-    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRblas.0.dylib 
-    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
+    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib 
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
     ## 
     ## locale:
     ## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
@@ -2457,47 +2462,48 @@ sessionInfo()
     ## [1] stats     graphics  grDevices utils     datasets  methods   base     
     ## 
     ## other attached packages:
-    ##  [1] lme4_1.1-35.5        Matrix_1.7-0         piecewiseSEM_2.3.0.1
-    ##  [4] compositions_2.0-8   patchwork_1.2.0.9000 speedyseq_0.5.3.9021
-    ##  [7] phyloseq_1.48.0      lubridate_1.9.3      forcats_1.0.0       
-    ## [10] stringr_1.5.1        dplyr_1.1.4          purrr_1.0.2         
+    ##  [1] lme4_1.1-37          Matrix_1.7-2         piecewiseSEM_2.3.0.1
+    ##  [4] compositions_2.0-8   patchwork_1.3.0      speedyseq_0.5.3.9021
+    ##  [7] phyloseq_1.50.0      lubridate_1.9.4      forcats_1.0.0       
+    ## [10] stringr_1.5.1        dplyr_1.1.4          purrr_1.0.4         
     ## [13] readr_2.1.5          tidyr_1.3.1          tibble_3.2.1        
     ## [16] ggplot2_3.5.1        tidyverse_2.0.0     
     ## 
     ## loaded via a namespace (and not attached):
-    ##   [1] sandwich_3.1-0          permute_0.9-7           rlang_1.1.4            
-    ##   [4] magrittr_2.0.3          multcomp_1.4-26         ade4_1.7-22            
-    ##   [7] compiler_4.4.1          mgcv_1.9-1              vctrs_0.6.5            
-    ##  [10] reshape2_1.4.4          pkgconfig_2.0.3         crayon_1.5.3           
-    ##  [13] fastmap_1.2.0           backports_1.5.0         XVector_0.44.0         
-    ##  [16] labeling_0.4.3          utf8_1.2.4              rmarkdown_2.28         
-    ##  [19] tzdb_0.4.0              nloptr_2.1.1            UCSC.utils_1.0.0       
-    ##  [22] bit_4.0.5               xfun_0.47               zlibbioc_1.50.0        
-    ##  [25] GenomeInfoDb_1.40.1     jsonlite_1.8.8          biomformat_1.32.0      
-    ##  [28] highr_0.11              rhdf5filters_1.16.0     Rhdf5lib_1.26.0        
-    ##  [31] broom_1.0.6             parallel_4.4.1          cluster_2.1.6          
-    ##  [34] R6_2.5.1                stringi_1.8.4           RColorBrewer_1.1-3     
-    ##  [37] boot_1.3-30             car_3.1-2               estimability_1.5.1     
-    ##  [40] Rcpp_1.0.13             iterators_1.0.14        knitr_1.48             
-    ##  [43] zoo_1.8-12              IRanges_2.38.1          splines_4.4.1          
-    ##  [46] igraph_2.0.3            timechange_0.3.0        tidyselect_1.2.1       
-    ##  [49] rstudioapi_0.16.0       abind_1.4-5             yaml_2.3.10            
-    ##  [52] MuMIn_1.48.4            vegan_2.6-8             codetools_0.2-20       
-    ##  [55] lattice_0.22-6          plyr_1.8.9              Biobase_2.64.0         
-    ##  [58] withr_3.0.1             evaluate_0.24.0         survival_3.6-4         
-    ##  [61] bayesm_3.1-6            Biostrings_2.72.1       pillar_1.9.0           
-    ##  [64] carData_3.0-5           DiagrammeR_1.0.11       tensorA_0.36.2.1       
-    ##  [67] foreach_1.5.2           stats4_4.4.1            insight_0.20.4         
-    ##  [70] generics_0.1.3          vroom_1.6.5             S4Vectors_0.42.1       
-    ##  [73] hms_1.1.3               munsell_0.5.1           scales_1.3.0           
-    ##  [76] minqa_1.2.8             xtable_1.8-4            glue_1.7.0             
-    ##  [79] emmeans_1.10.4          tools_4.4.1             robustbase_0.99-4      
-    ##  [82] data.table_1.16.0       visNetwork_2.1.2        mvtnorm_1.3-1          
-    ##  [85] rhdf5_2.48.0            grid_4.4.1              ape_5.8                
-    ##  [88] colorspace_2.1-1        nlme_3.1-164            GenomeInfoDbData_1.2.12
-    ##  [91] performance_0.12.3      cli_3.6.3               fansi_1.0.6            
-    ##  [94] gtable_0.3.5            DEoptimR_1.1-3          digest_0.6.37          
-    ##  [97] BiocGenerics_0.50.0     TH.data_1.1-2           htmlwidgets_1.6.4      
-    ## [100] farver_2.1.2            htmltools_0.5.8.1       multtest_2.60.0        
-    ## [103] lifecycle_1.0.4         httr_1.4.7              bit64_4.0.5            
-    ## [106] MASS_7.3-60.2
+    ##   [1] Rdpack_2.6.4            sandwich_3.1-1          permute_0.9-7          
+    ##   [4] rlang_1.1.4             magrittr_2.0.3          multcomp_1.4-28        
+    ##   [7] ade4_1.7-23             compiler_4.4.3          mgcv_1.9-1             
+    ##  [10] vctrs_0.6.5             reshape2_1.4.4          pkgconfig_2.0.3        
+    ##  [13] crayon_1.5.3            fastmap_1.2.0           backports_1.5.0        
+    ##  [16] XVector_0.46.0          labeling_0.4.3          utf8_1.2.4             
+    ##  [19] rmarkdown_2.27          tzdb_0.4.0              nloptr_2.2.1           
+    ##  [22] UCSC.utils_1.2.0        bit_4.6.0               xfun_0.45              
+    ##  [25] zlibbioc_1.52.0         GenomeInfoDb_1.42.3     jsonlite_1.8.8         
+    ##  [28] biomformat_1.34.0       highr_0.11              rhdf5filters_1.18.1    
+    ##  [31] Rhdf5lib_1.28.0         broom_1.0.7             parallel_4.4.3         
+    ##  [34] cluster_2.1.8           R6_2.5.1                stringi_1.8.4          
+    ##  [37] RColorBrewer_1.1-3      boot_1.3-31             car_3.1-3              
+    ##  [40] estimability_1.5.1      Rcpp_1.0.14             iterators_1.0.14       
+    ##  [43] knitr_1.47              zoo_1.8-14              IRanges_2.40.1         
+    ##  [46] splines_4.4.3           igraph_2.1.4            timechange_0.3.0       
+    ##  [49] tidyselect_1.2.1        rstudioapi_0.17.1       abind_1.4-8            
+    ##  [52] yaml_2.3.8              MuMIn_1.48.11           vegan_2.6-10           
+    ##  [55] codetools_0.2-20        lattice_0.22-6          plyr_1.8.9             
+    ##  [58] Biobase_2.66.0          withr_3.0.2             evaluate_1.0.3         
+    ##  [61] survival_3.8-3          bayesm_3.1-6            Biostrings_2.74.1      
+    ##  [64] pillar_1.9.0            carData_3.0-5           DiagrammeR_1.0.11      
+    ##  [67] tensorA_0.36.2.1        foreach_1.5.2           stats4_4.4.3           
+    ##  [70] insight_1.2.0           reformulas_0.4.1        generics_0.1.3         
+    ##  [73] vroom_1.6.5             S4Vectors_0.44.0        hms_1.1.3              
+    ##  [76] munsell_0.5.1           scales_1.3.0            minqa_1.2.8            
+    ##  [79] xtable_1.8-4            glue_1.7.0              emmeans_1.11.1         
+    ##  [82] tools_4.4.3             robustbase_0.99-4-1     data.table_1.17.0      
+    ##  [85] mvtnorm_1.3-3           visNetwork_2.1.2        rhdf5_2.50.2           
+    ##  [88] grid_4.4.3              ape_5.8-1               rbibutils_2.3          
+    ##  [91] colorspace_2.1-1        nlme_3.1-167            GenomeInfoDbData_1.2.13
+    ##  [94] performance_0.13.0      Formula_1.2-5           cli_3.6.3              
+    ##  [97] fansi_1.0.6             gtable_0.3.6            DEoptimR_1.1-3-1       
+    ## [100] digest_0.6.36           BiocGenerics_0.52.0     TH.data_1.1-3          
+    ## [103] htmlwidgets_1.6.4       farver_2.1.2            htmltools_0.5.8.1      
+    ## [106] multtest_2.62.0         lifecycle_1.0.4         httr_1.4.7             
+    ## [109] bit64_4.6.0-1           MASS_7.3-64

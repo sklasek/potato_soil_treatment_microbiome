@@ -1,7 +1,7 @@
 odds & ends
 ================
 Scott Klasek
-25 February, 2025
+15 May, 2025
 
 ## Purpose
 
@@ -23,8 +23,8 @@ invisible(lapply(packages, require, character.only = TRUE))
     ## ✔ dplyr     1.1.4     ✔ readr     2.1.5
     ## ✔ forcats   1.0.0     ✔ stringr   1.5.1
     ## ✔ ggplot2   3.5.1     ✔ tibble    3.2.1
-    ## ✔ lubridate 1.9.3     ✔ tidyr     1.3.1
-    ## ✔ purrr     1.0.2     
+    ## ✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+    ## ✔ purrr     1.0.4     
     ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
     ## ✖ dplyr::filter() masks stats::filter()
     ## ✖ dplyr::lag()    masks stats::lag()
@@ -174,7 +174,7 @@ plfa.gg <- ratio.gg / biomass.gg + plot_layout(heights = c(1, 1.5))
 plfa.gg
 ```
 
-![](48_odds_and_ends_treatment_yield_manuscript_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](10_PLFA_and_metadata_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
 
 It initially appeared that higher biomass and higher fungi/bacteria
 ratios were linked to the rotation lengths where organic amendment –\>
@@ -208,7 +208,7 @@ change.gg <- ggplot(df, aes(Label, pct_yield_increase, fill = Site))+
 change.gg
 ```
 
-![](48_odds_and_ends_treatment_yield_manuscript_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](10_PLFA_and_metadata_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ``` r
 # you know what, this is a more honest representation
@@ -221,7 +221,7 @@ ggplot(df %>% filter(increase_overall == T), aes(Label, pct_yield_increase, fill
   theme_bw()+theme(legend.position = "none")
 ```
 
-![](48_odds_and_ends_treatment_yield_manuscript_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
+![](10_PLFA_and_metadata_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
 
 The second is a more honest representation, because it only includes the
 models that showed an overall change with regard to treatment (relative
@@ -271,7 +271,7 @@ vppg.gg / nema.gg
     ## Removed 290 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](48_odds_and_ends_treatment_yield_manuscript_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](10_PLFA_and_metadata_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 ``` r
 sp1 %>% filter(State == "WI") %>% 
@@ -286,7 +286,7 @@ sp1 %>% filter(State == "WI") %>%
     ## Warning: Removed 62 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](48_odds_and_ends_treatment_yield_manuscript_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](10_PLFA_and_metadata_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 ## Conclusion
 
@@ -299,13 +299,13 @@ into a csv as a supplemental table/dataset.
 sessionInfo()
 ```
 
-    ## R version 4.4.1 (2024-06-14)
-    ## Platform: aarch64-apple-darwin20
-    ## Running under: macOS Sonoma 14.7.3
+    ## R version 4.4.3 (2025-02-28)
+    ## Platform: x86_64-apple-darwin20
+    ## Running under: macOS Sonoma 14.7.5
     ## 
     ## Matrix products: default
-    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRblas.0.dylib 
-    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
+    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib 
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
     ## 
     ## locale:
     ## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
@@ -317,37 +317,37 @@ sessionInfo()
     ## [1] stats     graphics  grDevices utils     datasets  methods   base     
     ## 
     ## other attached packages:
-    ##  [1] patchwork_1.2.0.9000 speedyseq_0.5.3.9021 phyloseq_1.48.0     
-    ##  [4] lubridate_1.9.3      forcats_1.0.0        stringr_1.5.1       
-    ##  [7] dplyr_1.1.4          purrr_1.0.2          readr_2.1.5         
+    ##  [1] patchwork_1.3.0      speedyseq_0.5.3.9021 phyloseq_1.50.0     
+    ##  [4] lubridate_1.9.4      forcats_1.0.0        stringr_1.5.1       
+    ##  [7] dplyr_1.1.4          purrr_1.0.4          readr_2.1.5         
     ## [10] tidyr_1.3.1          tibble_3.2.1         ggplot2_3.5.1       
     ## [13] tidyverse_2.0.0     
     ## 
     ## loaded via a namespace (and not attached):
-    ##  [1] ade4_1.7-22             tidyselect_1.2.1        farver_2.1.2           
-    ##  [4] Biostrings_2.72.1       fastmap_1.2.0           digest_0.6.37          
-    ##  [7] timechange_0.3.0        lifecycle_1.0.4         cluster_2.1.6          
-    ## [10] survival_3.6-4          magrittr_2.0.3          compiler_4.4.1         
-    ## [13] rlang_1.1.4             tools_4.4.1             igraph_2.0.3           
-    ## [16] utf8_1.2.4              yaml_2.3.10             data.table_1.16.0      
-    ## [19] knitr_1.48              labeling_0.4.3          bit_4.0.5              
-    ## [22] plyr_1.8.9              withr_3.0.1             BiocGenerics_0.50.0    
-    ## [25] grid_4.4.1              stats4_4.4.1            fansi_1.0.6            
-    ## [28] multtest_2.60.0         biomformat_1.32.0       colorspace_2.1-1       
-    ## [31] Rhdf5lib_1.26.0         scales_1.3.0            iterators_1.0.14       
-    ## [34] MASS_7.3-60.2           cli_3.6.3               rmarkdown_2.28         
-    ## [37] vegan_2.6-8             crayon_1.5.3            generics_0.1.3         
-    ## [40] rstudioapi_0.16.0       httr_1.4.7              reshape2_1.4.4         
-    ## [43] tzdb_0.4.0              ape_5.8                 rhdf5_2.48.0           
-    ## [46] zlibbioc_1.50.0         splines_4.4.1           parallel_4.4.1         
-    ## [49] XVector_0.44.0          vctrs_0.6.5             Matrix_1.7-0           
-    ## [52] jsonlite_1.8.8          IRanges_2.38.1          hms_1.1.3              
-    ## [55] S4Vectors_0.42.1        bit64_4.0.5             foreach_1.5.2          
+    ##  [1] ade4_1.7-23             tidyselect_1.2.1        farver_2.1.2           
+    ##  [4] Biostrings_2.74.1       fastmap_1.2.0           digest_0.6.36          
+    ##  [7] timechange_0.3.0        lifecycle_1.0.4         cluster_2.1.8          
+    ## [10] survival_3.8-3          magrittr_2.0.3          compiler_4.4.3         
+    ## [13] rlang_1.1.4             tools_4.4.3             igraph_2.1.4           
+    ## [16] utf8_1.2.4              yaml_2.3.8              data.table_1.17.0      
+    ## [19] knitr_1.47              labeling_0.4.3          bit_4.6.0              
+    ## [22] plyr_1.8.9              withr_3.0.2             BiocGenerics_0.52.0    
+    ## [25] grid_4.4.3              stats4_4.4.3            fansi_1.0.6            
+    ## [28] multtest_2.62.0         biomformat_1.34.0       colorspace_2.1-1       
+    ## [31] Rhdf5lib_1.28.0         scales_1.3.0            iterators_1.0.14       
+    ## [34] MASS_7.3-64             cli_3.6.3               rmarkdown_2.27         
+    ## [37] vegan_2.6-10            crayon_1.5.3            generics_0.1.3         
+    ## [40] rstudioapi_0.17.1       httr_1.4.7              reshape2_1.4.4         
+    ## [43] tzdb_0.4.0              ape_5.8-1               rhdf5_2.50.2           
+    ## [46] zlibbioc_1.52.0         splines_4.4.3           parallel_4.4.3         
+    ## [49] XVector_0.46.0          vctrs_0.6.5             Matrix_1.7-2           
+    ## [52] jsonlite_1.8.8          IRanges_2.40.1          hms_1.1.3              
+    ## [55] S4Vectors_0.44.0        bit64_4.6.0-1           foreach_1.5.2          
     ## [58] glue_1.7.0              codetools_0.2-20        stringi_1.8.4          
-    ## [61] gtable_0.3.5            GenomeInfoDb_1.40.1     UCSC.utils_1.0.0       
+    ## [61] gtable_0.3.6            GenomeInfoDb_1.42.3     UCSC.utils_1.2.0       
     ## [64] munsell_0.5.1           pillar_1.9.0            htmltools_0.5.8.1      
-    ## [67] rhdf5filters_1.16.0     GenomeInfoDbData_1.2.12 R6_2.5.1               
-    ## [70] vroom_1.6.5             evaluate_0.24.0         lattice_0.22-6         
-    ## [73] Biobase_2.64.0          highr_0.11              Rcpp_1.0.13            
-    ## [76] nlme_3.1-164            permute_0.9-7           mgcv_1.9-1             
-    ## [79] xfun_0.47               pkgconfig_2.0.3
+    ## [67] rhdf5filters_1.18.1     GenomeInfoDbData_1.2.13 R6_2.5.1               
+    ## [70] vroom_1.6.5             evaluate_1.0.3          lattice_0.22-6         
+    ## [73] Biobase_2.66.0          highr_0.11              Rcpp_1.0.14            
+    ## [76] nlme_3.1-167            permute_0.9-7           mgcv_1.9-1             
+    ## [79] xfun_0.45               pkgconfig_2.0.3

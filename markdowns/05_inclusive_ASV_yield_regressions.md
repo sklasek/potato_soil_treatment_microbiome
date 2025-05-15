@@ -804,21 +804,21 @@ df1[sample(nrow(df1), 3), ]
 ```
 
     ##          ASV     loglik dfree lm_mult_r_sq lm_adj_r_sq  estimate statistic
-    ## 635  ASV9143  -72.90915    11    0.2671967   0.2005783 -76.14175 -2.281475
-    ## 241 ASV21983 -116.07213    22    0.3013298   0.2695721  39.64775  3.599768
-    ## 212  ASV1970  -71.42994    11    0.4149244   0.3617357 -90.41340 -3.281380
+    ## 532  ASV6122 -155.17410    26    0.2578340   0.2292892  82.00365  2.563849
+    ## 66  ASV12430  -95.80825    20    0.2544861   0.2172104  20.84460  2.473307
+    ## 91  ASV13578  -86.91139    16    0.4345928   0.3992549 -46.77733 -3.222497
     ##               p      padj site amplicon season rotation  Kingdom
-    ## 635 0.043423509 0.9170040   OR      16S summer        3 Bacteria
-    ## 241 0.001592370 0.3807285   ID      16S summer        3 Bacteria
-    ## 212 0.007315826 0.6557314   OR      16S summer        3 Bacteria
-    ##              Phylum         Class           Order           Family     Genus
-    ## 635 Patescibacteria Dojkabacteria            <NA>             <NA>      <NA>
-    ## 241    Bacteroidota   Bacteroidia Chitinophagales Chitinophagaceae Niastella
-    ## 212     Chloroflexi  Anaerolineae     RBG-13-54-9             <NA>      <NA>
-    ##     Species       closest_tax
-    ## 635    <NA> Cl. Dojkabacteria
-    ## 241    <NA>     Niastella sp.
-    ## 212    <NA>  Ord. RBG-13-54-9
+    ## 532 0.016480769 0.3267479   CO      16S summer        3 Bacteria
+    ## 66  0.022476617 0.8413737   ME      16S summer        3 Bacteria
+    ## 91  0.005320062 0.5052936   MN      16S summer        3 Bacteria
+    ##               Phylum               Class               Order
+    ## 532   Proteobacteria Gammaproteobacteria     Burkholderiales
+    ## 66       Chloroflexi        Chloroflexia      Chloroflexales
+    ## 91  Actinobacteriota     Thermoleophilia Solirubrobacterales
+    ##                   Family           Genus Species         closest_tax
+    ## 532     Methylophilaceae   Methylotenera    <NA>   Methylotenera sp.
+    ## 66        Roseiflexaceae            <NA>    <NA> Fam. Roseiflexaceae
+    ## 91  Solirubrobacteraceae Solirubrobacter    <NA> Solirubrobacter sp.
 
 ``` r
 # or target hits with specific R2 values
@@ -841,7 +841,7 @@ test.regression.gg
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-![](43_inclusive_ASV_yield_regressions_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](05_inclusive_ASV_yield_regressions_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ``` r
 ### Summary Stats
@@ -875,7 +875,7 @@ bact.yield.df %>% filter(rotation == 3 & season == "summer") %>%
     geom_point(size = 0.3)
 ```
 
-![](43_inclusive_ASV_yield_regressions_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
+![](05_inclusive_ASV_yield_regressions_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
 
 Increasing the R2 cutoff gives more of an “advantage” to the sites that
 have low sample numbers, because fewer of their regressions will be
@@ -899,13 +899,13 @@ yield-associations.
 sessionInfo()
 ```
 
-    ## R version 4.3.2 (2023-10-31)
-    ## Platform: aarch64-apple-darwin20 (64-bit)
-    ## Running under: macOS Sonoma 14.4.1
+    ## R version 4.4.3 (2025-02-28)
+    ## Platform: x86_64-apple-darwin20
+    ## Running under: macOS Sonoma 14.7.5
     ## 
     ## Matrix products: default
-    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.3-arm64/Resources/lib/libRblas.0.dylib 
-    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.3-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.11.0
+    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib 
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
     ## 
     ## locale:
     ## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
@@ -917,43 +917,39 @@ sessionInfo()
     ## [1] stats     graphics  grDevices utils     datasets  methods   base     
     ## 
     ## other attached packages:
-    ##  [1] ggpmisc_0.5.5        ggpp_0.5.6           edgeR_4.0.16        
-    ##  [4] limma_3.58.1         broom_1.0.5          MASS_7.3-60.0.1     
-    ##  [7] patchwork_1.2.0      data.table_1.14.10   glmnet_4.1-8        
-    ## [10] Matrix_1.6-5         compositions_2.0-8   speedyseq_0.5.3.9018
-    ## [13] phyloseq_1.46.0      lubridate_1.9.3      forcats_1.0.0       
-    ## [16] stringr_1.5.1        dplyr_1.1.4          purrr_1.0.2         
-    ## [19] readr_2.1.5          tidyr_1.3.0          tibble_3.2.1        
-    ## [22] ggplot2_3.5.0        tidyverse_2.0.0     
+    ##  [1] broom_1.0.7          MASS_7.3-64          Matrix_1.7-2        
+    ##  [4] patchwork_1.3.0      data.table_1.17.0    compositions_2.0-8  
+    ##  [7] speedyseq_0.5.3.9021 phyloseq_1.50.0      lubridate_1.9.4     
+    ## [10] forcats_1.0.0        stringr_1.5.1        dplyr_1.1.4         
+    ## [13] purrr_1.0.4          readr_2.1.5          tidyr_1.3.1         
+    ## [16] tibble_3.2.1         ggplot2_3.5.1        tidyverse_2.0.0     
     ## 
     ## loaded via a namespace (and not attached):
-    ##  [1] bitops_1.0-7            polynom_1.4-1           permute_0.9-7          
-    ##  [4] rlang_1.1.3             magrittr_2.0.3          ade4_1.7-22            
-    ##  [7] compiler_4.3.2          mgcv_1.9-1              vctrs_0.6.5            
-    ## [10] reshape2_1.4.4          quantreg_5.97           pkgconfig_2.0.3        
-    ## [13] shape_1.4.6.1           crayon_1.5.2            fastmap_1.1.1          
-    ## [16] backports_1.4.1         XVector_0.42.0          labeling_0.4.3         
-    ## [19] utf8_1.2.4              rmarkdown_2.25          tzdb_0.4.0             
-    ## [22] bit_4.0.5               MatrixModels_0.5-3      xfun_0.41              
-    ## [25] zlibbioc_1.48.0         GenomeInfoDb_1.38.8     jsonlite_1.8.8         
-    ## [28] biomformat_1.30.0       highr_0.10              rhdf5filters_1.14.1    
-    ## [31] Rhdf5lib_1.24.1         parallel_4.3.2          cluster_2.1.6          
-    ## [34] R6_2.5.1                stringi_1.8.3           Rcpp_1.0.12            
-    ## [37] iterators_1.0.14        knitr_1.45              IRanges_2.36.0         
-    ## [40] splines_4.3.2           igraph_2.0.3            timechange_0.2.0       
-    ## [43] tidyselect_1.2.0        rstudioapi_0.15.0       yaml_2.3.8             
-    ## [46] vegan_2.6-4             codetools_0.2-19        lattice_0.22-5         
-    ## [49] plyr_1.8.9              Biobase_2.62.0          withr_3.0.0            
-    ## [52] evaluate_0.23           survival_3.5-7          bayesm_3.1-6           
-    ## [55] Biostrings_2.70.3       pillar_1.9.0            tensorA_0.36.2.1       
-    ## [58] foreach_1.5.2           stats4_4.3.2            generics_0.1.3         
-    ## [61] vroom_1.6.5             RCurl_1.98-1.14         S4Vectors_0.40.2       
-    ## [64] hms_1.1.3               munsell_0.5.0           scales_1.3.0           
-    ## [67] glue_1.7.0              tools_4.3.2             robustbase_0.99-2      
-    ## [70] SparseM_1.81            locfit_1.5-9.9          rhdf5_2.46.1           
-    ## [73] grid_4.3.2              ape_5.7-1               colorspace_2.1-0       
-    ## [76] nlme_3.1-164            GenomeInfoDbData_1.2.11 cli_3.6.2              
-    ## [79] fansi_1.0.6             gtable_0.3.4            DEoptimR_1.1-3         
-    ## [82] digest_0.6.34           BiocGenerics_0.48.1     farver_2.1.1           
-    ## [85] htmltools_0.5.7         multtest_2.58.0         lifecycle_1.0.4        
-    ## [88] statmod_1.5.0           bit64_4.0.5
+    ##  [1] ade4_1.7-23             tidyselect_1.2.1        farver_2.1.2           
+    ##  [4] Biostrings_2.74.1       fastmap_1.2.0           tensorA_0.36.2.1       
+    ##  [7] digest_0.6.36           timechange_0.3.0        lifecycle_1.0.4        
+    ## [10] cluster_2.1.8           survival_3.8-3          magrittr_2.0.3         
+    ## [13] compiler_4.4.3          rlang_1.1.4             tools_4.4.3            
+    ## [16] igraph_2.1.4            utf8_1.2.4              yaml_2.3.8             
+    ## [19] knitr_1.47              labeling_0.4.3          bit_4.6.0              
+    ## [22] plyr_1.8.9              withr_3.0.2             BiocGenerics_0.52.0    
+    ## [25] grid_4.4.3              stats4_4.4.3            fansi_1.0.6            
+    ## [28] multtest_2.62.0         biomformat_1.34.0       colorspace_2.1-1       
+    ## [31] Rhdf5lib_1.28.0         scales_1.3.0            iterators_1.0.14       
+    ## [34] cli_3.6.3               rmarkdown_2.27          vegan_2.6-10           
+    ## [37] crayon_1.5.3            generics_0.1.3          robustbase_0.99-4-1    
+    ## [40] rstudioapi_0.17.1       httr_1.4.7              reshape2_1.4.4         
+    ## [43] tzdb_0.4.0              bayesm_3.1-6            ape_5.8-1              
+    ## [46] rhdf5_2.50.2            zlibbioc_1.52.0         splines_4.4.3          
+    ## [49] parallel_4.4.3          XVector_0.46.0          vctrs_0.6.5            
+    ## [52] jsonlite_1.8.8          IRanges_2.40.1          hms_1.1.3              
+    ## [55] S4Vectors_0.44.0        bit64_4.6.0-1           foreach_1.5.2          
+    ## [58] glue_1.7.0              DEoptimR_1.1-3-1        codetools_0.2-20       
+    ## [61] stringi_1.8.4           gtable_0.3.6            GenomeInfoDb_1.42.3    
+    ## [64] UCSC.utils_1.2.0        munsell_0.5.1           pillar_1.9.0           
+    ## [67] htmltools_0.5.8.1       rhdf5filters_1.18.1     GenomeInfoDbData_1.2.13
+    ## [70] R6_2.5.1                vroom_1.6.5             evaluate_1.0.3         
+    ## [73] lattice_0.22-6          Biobase_2.66.0          highr_0.11             
+    ## [76] backports_1.5.0         Rcpp_1.0.14             nlme_3.1-167           
+    ## [79] permute_0.9-7           mgcv_1.9-1              xfun_0.45              
+    ## [82] pkgconfig_2.0.3

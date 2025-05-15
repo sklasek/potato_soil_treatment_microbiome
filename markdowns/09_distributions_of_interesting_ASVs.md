@@ -1,7 +1,7 @@
 distributions of interesting ASVs
 ================
 Scott Klasek
-07 May, 2025
+15 May, 2025
 
 ## Purpose
 
@@ -92,7 +92,7 @@ gc()
 ```
 
     ##              used   (Mb) gc trigger    (Mb) limit (Mb)   max used    (Mb)
-    ## Ncells    5831556  311.5    8437255   450.6         NA    6708171   358.3
+    ## Ncells    5831556  311.5    8437265   450.6         NA    6708171   358.3
     ## Vcells 1195208724 9118.8 3512283555 26796.6      32768 3511650201 26791.8
 
 ``` r
@@ -334,7 +334,7 @@ sep.by.rotation.gg
 grid::grid.draw(grid::textGrob("Scenario count", x = 0.02, rot = 90))
 ```
 
-![](46_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](09_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 Trying to make an alluvial plot with NA values omitted… it’s harder than
 it should be
@@ -425,7 +425,7 @@ plot.biomarkers(ps1, mi.its.amd.asvs, "ASV")+
   theme(axis.text.x = element_blank())
 ```
 
-![](46_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](09_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 Check their yield-associations:
 
@@ -475,7 +475,7 @@ oreida.bact.gg <- plot.biomarkers(oreida.bact.ps, id.bact.amd.asvs, "ASV")+
 oreida.bact.gg
 ```
 
-![](46_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](09_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 Check their yield-associations:
 
@@ -528,7 +528,7 @@ or.id.asvs.bact.gg <- plot.biomarkers(or.bact.ps, id.bact.amd.asvs, "ASV")+
 or.id.asvs.bact.gg
 ```
 
-![](46_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](09_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ## Plot distributions of the ASVs (any year)
 
@@ -626,7 +626,7 @@ oreida.gg <- plot.biomarkers.2(test.ps, id.bact.amd.asvs, "label") %>%
 oreida.gg
 ```
 
-![](46_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](09_distributions_of_interesting_ASVs_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 Interesting- the variation WITHIN ID amendment treatments is due to
 whether compost was added or not. These taxa are heavily
@@ -667,7 +667,7 @@ sessionInfo()
 
     ## R version 4.4.3 (2025-02-28)
     ## Platform: x86_64-apple-darwin20
-    ## Running under: macOS Sonoma 14.7.4
+    ## Running under: macOS Sonoma 14.7.5
     ## 
     ## Matrix products: default
     ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib 

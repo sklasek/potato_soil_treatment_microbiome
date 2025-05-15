@@ -1,7 +1,7 @@
 Variance Partitioning visuals
 ================
 Scott Klasek
-03 February, 2025
+15 May, 2025
 
 ## Purpose
 
@@ -352,7 +352,7 @@ varplot.gg
     ## Warning: Removed 14 rows containing missing values or values outside the scale range
     ## (`geom_bar()`).
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
 #### table to indicate which sites had which treatments and other factors
 
@@ -382,7 +382,7 @@ design.gg <- design.table %>%
 design.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
 Remember there are irregularities. MN1 did actually use brassicas, but
 they were confounded with organic amendment. ME2 used two cultivars, but
@@ -524,7 +524,7 @@ yield.gg
     ## Warning: Removed 35 rows containing missing values or values outside the scale range
     ## (`geom_text()`).
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
 
 All the figures
 
@@ -539,7 +539,7 @@ fig1
     ## Warning: Removed 14 rows containing missing values or values outside the scale range
     ## (`geom_bar()`).
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 Re yield: these are 2022 yields split by general treatment category and
 rotation. Fumigation and Amendment could be disentangled from one
@@ -629,13 +629,13 @@ amended.filt.df %>%
     ## # Groups:   ASV [48]
     ##    ASV     sum_var num_sites mean_var Phylum           Genus Species closest_tax
     ##    <chr>     <dbl>     <int>    <dbl> <chr>            <chr> <chr>   <chr>      
-    ##  1 ASV75     1.31          3    0.438 Mortierellomyco… Mort… indohii Mortierell…
+    ##  1 ASV75     1.34          3    0.446 Mortierellomyco… Mort… indohii Mortierell…
     ##  2 ASV59     1.17          6    0.195 Ascomycota       Botr… atrogr… Botryotric…
     ##  3 ASV80     1.12          6    0.187 Ascomycota       Botr… spirot… Botryotric…
     ##  4 ASV148    1.02          7    0.146 Ascomycota       <NA>  <NA>    Fam. Pseud…
     ##  5 ASV179    0.956         7    0.137 Ascomycota       Scop… cordiae Scopulario…
     ##  6 ASV93     0.936         8    0.117 Monoblepharomyc… <NA>  <NA>    Fam. Sanch…
-    ##  7 ASV161    0.910         5    0.182 Ascomycota       Kern… column… Kernia col…
+    ##  7 ASV161    0.909         5    0.182 Ascomycota       Kern… column… Kernia col…
     ##  8 ASV630    0.875         2    0.437 Ascomycota       Petr… musisp… Petriella …
     ##  9 ASV158    0.793         6    0.132 Ascomycota       Kern… column… Kernia col…
     ## 10 ASV1198   0.774         2    0.387 Ascomycota       Ward… inflat… Wardomyces…
@@ -659,7 +659,7 @@ plot_biomarkers(its.ps.list[["ND.ITS.ps"]], mort.mn2.asvs, "Species")+
     ## Scale for y is already present.
     ## Adding another scale for y, which will replace the existing scale.
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 ``` r
 # plot Kernia in MN1 where the change was drastic:
@@ -679,7 +679,7 @@ plot_biomarkers(its.ps.list[["MN.ITS.ps"]], kern.mn1.asvs, "Species")+
     ## Scale for y is already present.
     ## Adding another scale for y, which will replace the existing scale.
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-9-2.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-9-2.png)<!-- -->
 
 I used my add_taxa() function to filter amendment-associated ASVs by
 Genus, and there was only one that contained several ASVs: Kernia. All
@@ -857,7 +857,7 @@ its.var.abund.occ.df %>%
     ## Warning: Removed 2103 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ``` r
 # occupancy on amended
@@ -871,7 +871,7 @@ its.var.abund.occ.df %>%
     ## Warning: Removed 2090 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-15-2.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-15-2.png)<!-- -->
 
 Hmm, looking at the ITS there’s not as much of a difference as I
 suspected, and it doesn’t seem to vary with the type of treatment. But
@@ -894,7 +894,7 @@ bact.var.abund.occ.df %>%
     ## Warning: Removed 16957 rows containing non-finite outside the scale range
     ## (`stat_binhex()`).
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ``` r
 # occupancy on amended
@@ -908,7 +908,7 @@ bact.var.abund.occ.df %>%
     ## Warning: Removed 16957 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-16-2.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-16-2.png)<!-- -->
 
 ## Yield-associated ASVs across sites
 
@@ -944,56 +944,56 @@ its.yield.tree <- build_tree(its.yield.df2, "ITS", "ASV1110") # a Chlorophyta
     ## Determining distance matrix based on shared 8-mers:
     ## ================================================================================
     ## 
-    ## Time difference of 3.12 secs
+    ## Time difference of 2.11 secs
     ## 
     ## Clustering into groups by similarity:
     ## ================================================================================
     ## 
-    ## Time difference of 0.04 secs
+    ## Time difference of 0.08 secs
     ## 
     ## Aligning Sequences:
     ## ================================================================================
     ## 
-    ## Time difference of 2.71 secs
+    ## Time difference of 3.6 secs
     ## 
     ## Iteration 1 of 2:
     ## 
     ## Determining distance matrix based on alignment:
     ## ================================================================================
     ## 
-    ## Time difference of 0.33 secs
+    ## Time difference of 0.35 secs
     ## 
     ## Reclustering into groups by similarity:
     ## ================================================================================
     ## 
-    ## Time difference of 0.07 secs
+    ## Time difference of 0.08 secs
     ## 
     ## Realigning Sequences:
     ## ================================================================================
     ## 
-    ## Time difference of 1.28 secs
+    ## Time difference of 1.79 secs
     ## 
     ## Iteration 2 of 2:
     ## 
     ## Determining distance matrix based on alignment:
     ## ================================================================================
     ## 
-    ## Time difference of 0.41 secs
+    ## Time difference of 0.44 secs
     ## 
     ## Reclustering into groups by similarity:
     ## ================================================================================
     ## 
-    ## Time difference of 0.06 secs
+    ## Time difference of 0.09 secs
     ## 
     ## Realigning Sequences:
     ## ================================================================================
     ## 
-    ## Time difference of 1.01 secs
+    ## Time difference of 1.49 secs
     ## 
     ## Refining the alignment:
     ## ================================================================================
     ## 
-    ## Time difference of 1.33 secs
+    ## Time difference of 1.85 secs
 
     ## Found more than one class "phylo" in cache; using the first, from namespace 'phyloseq'
 
@@ -1013,7 +1013,7 @@ its.yield.gg <- its.yield.df2 %>%
 its.yield.tree + its.yield.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 There were a lot more yield-associations in ME2 (Larkin) than in any of
 the others, so I decided to drop that site. I also increased the
 threshold R2 to 0.3 to inspect only the strongest results. Still it
@@ -1104,7 +1104,7 @@ its.trt.yld.gg <- its.trt.yld %>%
 its.trt.yld.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ``` r
 # write out
@@ -1151,7 +1151,7 @@ mortierella.yields.gg <- its.yield.df2 %>%
 mortierella.yields.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 ``` r
 # plot many genera
@@ -1167,7 +1167,7 @@ its.yield.df2 %>%
     theme_bw()
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-20-2.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-20-2.png)<!-- -->
 Not surprised to see Mortierella as the most yield-associated fungal
 genus.  
 When plotting hits to yield by genus, nearly all genera have positive
@@ -1198,7 +1198,7 @@ its.yield.strengths.gg <- its.yield.df2 %>%
 its.yield.counts.gg / its.yield.strengths.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 ### 16S
 
@@ -1242,7 +1242,7 @@ bact.yield.gg <- bact.yield.df2 %>%
 bact.yield.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 #### intersection ASVs
 
@@ -1380,7 +1380,7 @@ bact.trt.yld.gg <- bact.trt.yld %>%
 bact.trt.yld.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ``` r
 # write out
@@ -1422,7 +1422,7 @@ all.trt.yld.gg <- all.trt.yld %>%
 all.trt.yld.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 ``` r
 # write out
@@ -1468,7 +1468,7 @@ nocard.yields.gg <- bact.yield.df2 %>%
 nocard.yields.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 ``` r
 # plot many genera
@@ -1483,7 +1483,7 @@ bact.yield.df2 %>%
     theme_bw()
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-26-2.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-26-2.png)<!-- -->
 Bacterial genera are even more variable in their yield-associations than
 ITS.
 
@@ -1511,7 +1511,7 @@ bact.yield.strengths.gg <- bact.yield.df2 %>%
 bact.yield.counts.gg / bact.yield.strengths.gg
 ```
 
-![](40_variance_visuals_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](04_variance_visuals_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 ## Conclusions
 
@@ -1539,13 +1539,13 @@ fixing these classifications.
 sessionInfo()
 ```
 
-    ## R version 4.4.1 (2024-06-14)
-    ## Platform: aarch64-apple-darwin20
-    ## Running under: macOS Sonoma 14.7.1
+    ## R version 4.4.3 (2025-02-28)
+    ## Platform: x86_64-apple-darwin20
+    ## Running under: macOS Sonoma 14.7.5
     ## 
     ## Matrix products: default
-    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRblas.0.dylib 
-    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
+    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib 
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
     ## 
     ## locale:
     ## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
@@ -1558,52 +1558,52 @@ sessionInfo()
     ## [8] base     
     ## 
     ## other attached packages:
-    ##  [1] variancePartition_1.34.0 BiocParallel_1.38.0      limma_3.60.4            
-    ##  [4] lme4_1.1-35.5            Matrix_1.7-0             hexbin_1.28.5           
-    ##  [7] treeio_1.28.0            ggtree_3.12.0            phangorn_2.12.1         
-    ## [10] ape_5.8                  DECIPHER_3.0.0           Biostrings_2.72.1       
-    ## [13] GenomeInfoDb_1.40.1      XVector_0.44.0           IRanges_2.38.1          
-    ## [16] S4Vectors_0.42.1         BiocGenerics_0.50.0      NatParksPalettes_0.2.0  
-    ## [19] patchwork_1.2.0.9000     speedyseq_0.5.3.9021     phyloseq_1.48.0         
-    ## [22] lubridate_1.9.3          forcats_1.0.0            stringr_1.5.1           
-    ## [25] dplyr_1.1.4              purrr_1.0.2              readr_2.1.5             
+    ##  [1] variancePartition_1.36.3 BiocParallel_1.40.0      limma_3.62.2            
+    ##  [4] lme4_1.1-37              Matrix_1.7-2             hexbin_1.28.5           
+    ##  [7] treeio_1.30.0            ggtree_3.14.0            phangorn_2.12.1         
+    ## [10] ape_5.8-1                DECIPHER_3.2.0           Biostrings_2.74.1       
+    ## [13] GenomeInfoDb_1.42.3      XVector_0.46.0           IRanges_2.40.1          
+    ## [16] S4Vectors_0.44.0         BiocGenerics_0.52.0      NatParksPalettes_0.2.0  
+    ## [19] patchwork_1.3.0          speedyseq_0.5.3.9021     phyloseq_1.50.0         
+    ## [22] lubridate_1.9.4          forcats_1.0.0            stringr_1.5.1           
+    ## [25] dplyr_1.1.4              purrr_1.0.4              readr_2.1.5             
     ## [28] tidyr_1.3.1              tibble_3.2.1             ggplot2_3.5.1           
     ## [31] tidyverse_2.0.0         
     ## 
     ## loaded via a namespace (and not attached):
-    ##   [1] rstudioapi_0.16.0       jsonlite_1.8.8          magrittr_2.0.3         
-    ##   [4] farver_2.1.2            nloptr_2.1.1            rmarkdown_2.28         
-    ##   [7] fs_1.6.4                zlibbioc_1.50.0         vctrs_0.6.5            
-    ##  [10] multtest_2.60.0         minqa_1.2.8             htmltools_0.5.8.1      
-    ##  [13] broom_1.0.6             Rhdf5lib_1.26.0         rhdf5_2.48.0           
-    ##  [16] gridGraphics_0.5-1      KernSmooth_2.23-24      pbkrtest_0.5.3         
-    ##  [19] plyr_1.8.9              igraph_2.0.3            lifecycle_1.0.4        
+    ##   [1] rstudioapi_0.17.1       jsonlite_1.8.8          magrittr_2.0.3         
+    ##   [4] farver_2.1.2            nloptr_2.2.1            rmarkdown_2.27         
+    ##   [7] fs_1.6.4                zlibbioc_1.52.0         vctrs_0.6.5            
+    ##  [10] multtest_2.62.0         minqa_1.2.8             htmltools_0.5.8.1      
+    ##  [13] broom_1.0.7             Rhdf5lib_1.28.0         rhdf5_2.50.2           
+    ##  [16] gridGraphics_0.5-1      KernSmooth_2.23-26      pbkrtest_0.5.4         
+    ##  [19] plyr_1.8.9              igraph_2.1.4            lifecycle_1.0.4        
     ##  [22] iterators_1.0.14        pkgconfig_2.0.3         R6_2.5.1               
-    ##  [25] fastmap_1.2.0           GenomeInfoDbData_1.2.12 rbibutils_2.2.16       
-    ##  [28] digest_0.6.37           numDeriv_2016.8-1.1     aplot_0.2.4            
-    ##  [31] colorspace_2.1-1        vegan_2.6-8             labeling_0.4.3         
+    ##  [25] fastmap_1.2.0           GenomeInfoDbData_1.2.13 rbibutils_2.3          
+    ##  [28] digest_0.6.36           numDeriv_2016.8-1.1     aplot_0.2.5            
+    ##  [31] colorspace_2.1-1        vegan_2.6-10            labeling_0.4.3         
     ##  [34] fansi_1.0.6             timechange_0.3.0        httr_1.4.7             
-    ##  [37] mgcv_1.9-1              compiler_4.4.1          bit64_4.0.5            
-    ##  [40] aod_1.3.3               withr_3.0.1             backports_1.5.0        
-    ##  [43] DBI_1.2.3               highr_0.11              gplots_3.1.3.1         
-    ##  [46] MASS_7.3-60.2           corpcor_1.6.10          biomformat_1.32.0      
+    ##  [37] mgcv_1.9-1              compiler_4.4.3          bit64_4.6.0-1          
+    ##  [40] aod_1.3.3               withr_3.0.2             backports_1.5.0        
+    ##  [43] DBI_1.2.3               highr_0.11              gplots_3.2.0           
+    ##  [46] MASS_7.3-64             corpcor_1.6.10          biomformat_1.34.0      
     ##  [49] gtools_3.9.5            caTools_1.18.3          permute_0.9-7          
-    ##  [52] tools_4.4.1             remaCor_0.0.18          glue_1.7.0             
-    ##  [55] quadprog_1.5-8          nlme_3.1-164            rhdf5filters_1.16.0    
-    ##  [58] grid_4.4.1              cluster_2.1.6           reshape2_1.4.4         
-    ##  [61] ade4_1.7-22             generics_0.1.3          gtable_0.3.5           
-    ##  [64] tzdb_0.4.0              data.table_1.16.0       hms_1.1.3              
+    ##  [52] tools_4.4.3             remaCor_0.0.18          glue_1.7.0             
+    ##  [55] quadprog_1.5-8          nlme_3.1-167            rhdf5filters_1.18.1    
+    ##  [58] grid_4.4.3              cluster_2.1.8           reshape2_1.4.4         
+    ##  [61] ade4_1.7-23             generics_0.1.3          gtable_0.3.6           
+    ##  [64] tzdb_0.4.0              data.table_1.17.0       hms_1.1.3              
     ##  [67] utf8_1.2.4              foreach_1.5.2           pillar_1.9.0           
-    ##  [70] vroom_1.6.5             yulab.utils_0.2.0       splines_4.4.1          
-    ##  [73] lattice_0.22-6          bit_4.0.5               survival_3.6-4         
-    ##  [76] tidyselect_1.2.1        knitr_1.48              RhpcBLASctl_0.23-42    
-    ##  [79] xfun_0.47               Biobase_2.64.0          statmod_1.5.0          
-    ##  [82] matrixStats_1.4.1       stringi_1.8.4           UCSC.utils_1.0.0       
-    ##  [85] lazyeval_0.2.2          ggfun_0.1.8             yaml_2.3.10            
-    ##  [88] boot_1.3-30             evaluate_0.24.0         codetools_0.2-20       
-    ##  [91] ggplotify_0.1.2         cli_3.6.3               Rdpack_2.6.1           
-    ##  [94] munsell_0.5.1           Rcpp_1.0.13             EnvStats_3.0.0         
-    ##  [97] parallel_4.4.1          bitops_1.0-8            mvtnorm_1.3-1          
-    ## [100] tidytree_0.4.6          lmerTest_3.1-3          scales_1.3.0           
-    ## [103] crayon_1.5.3            fANCOVA_0.6-1           rlang_1.1.4            
-    ## [106] fastmatch_1.1-6
+    ##  [70] vroom_1.6.5             yulab.utils_0.2.0       splines_4.4.3          
+    ##  [73] lattice_0.22-6          bit_4.6.0               survival_3.8-3         
+    ##  [76] tidyselect_1.2.1        knitr_1.47              reformulas_0.4.1       
+    ##  [79] RhpcBLASctl_0.23-42     xfun_0.45               Biobase_2.66.0         
+    ##  [82] statmod_1.5.0           matrixStats_1.5.0       stringi_1.8.4          
+    ##  [85] UCSC.utils_1.2.0        lazyeval_0.2.2          ggfun_0.1.8            
+    ##  [88] yaml_2.3.8              boot_1.3-31             evaluate_1.0.3         
+    ##  [91] codetools_0.2-20        ggplotify_0.1.2         cli_3.6.3              
+    ##  [94] Rdpack_2.6.4            munsell_0.5.1           Rcpp_1.0.14            
+    ##  [97] EnvStats_3.1.0          parallel_4.4.3          bitops_1.0-9           
+    ## [100] mvtnorm_1.3-3           tidytree_0.4.6          lmerTest_3.1-3         
+    ## [103] scales_1.3.0            crayon_1.5.3            fANCOVA_0.6-1          
+    ## [106] rlang_1.1.4             fastmatch_1.1-6
