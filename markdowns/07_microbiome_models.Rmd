@@ -1,0 +1,1062 @@
+---
+title: "SEM"
+author: "Scott Klasek"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: github_document 
+---
+## Purpose
+Incorporate ASV abundances into treatment --> yield models using SEM. Also, provide some background about directionality about the treatment-responsive ASVs: did they all increase in the particular treatment, etc.  
+
+Make generalizations about when/where/which treatments affected yields THROUGH changing the microbiome.  
+
+## Setup
+#### load libraries
+```{r}
+packages <- c("tidyverse", "phyloseq", "speedyseq", "patchwork", "compositions", "piecewiseSEM", "lme4")
+invisible(lapply(packages, require, character.only = TRUE))
+```
+
+#### load data
+```{r}
+# lists of phyloseq objects
+# these include metadata updated in doc 39.Rmd
+# they are ALL years, ASVs and samples NOT subsetted or transformed
+its.ps.list <- readRDS(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/its.ps.list")
+its.ps.list <- its.ps.list[c(1:7,9)] # remove Larkin samples
+bact.ps.list <- readRDS(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/bact.ps.list")
+bact.ps.list <- bact.ps.list[c(1:7,9)] # remove Larkin samples
+
+### treatment and yield associated ASVs
+its.asvs <- read.csv(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/its.asvs.treatment.and.yield.associated.csv")
+bact.asvs <- read.csv(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/bact.asvs.treatment.and.yield.associated.csv")
+all.trt.yld.asvs <- read.csv(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/all.asvs.treatment.and.yield.associated.filtered.csv")
+
+### just yield-associated ASVs with rotation/season info for context
+its.yield.df <- read.csv(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/its.yield.lm.results.txt")
+bact.yield.df <- read.csv(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/bact.yield.lm.results.txt")
+
+# jim's spreadsheet of soil chemical metadata
+jim.info <- read.csv(file="/Users/klas0061/Desktop/UMN/jim_info/PSHP_ALL_obj_1_all_data_2024_02_29.csv") # import
+```
+
+#### reformat soil chemical metadata so it can be added to phyloseq objects using merge_with_jim_data       
+```{r}
+# basic clean-up stuff
+colnames(jim.info) <- jim.info[1,] # fix column names (there are two header cols)
+jim.info <- jim.info[2:nrow(jim.info),] # omit redundant column name 
+
+for (i in c(2:3,5:6)){jim.info[,i] <- as.numeric(jim.info[,i])} # convert columns that should be numeric into numeric
+
+# remove extraneous year columns that correspond to yield data only
+jim.info <- jim.info[,c(1:101,103:129,131:ncol(jim.info))]
+
+# select data columns to merge by, and to add (an example, can always select more later)
+jim.info.s <- jim.info %>% dplyr::select(State, Objective, Rotation, Plot, Year, Month, 
+                                  pH, `Nitrate-N (ppm)`, `NH4-N (ppm)`, `P-Olsen (ppm)`, `P-Bray (ppm)`,
+                                  `OM (%)`, `Solvita (ppm)`, `Total C (%)`, `Total organic C (%)`, `POX-C (ppm)`) 
+
+for (i in 7:16){jim.info.s[,i] <- as.numeric(jim.info.s[,i])} # again, convert columns that should be numeric into numeric
+
+# change OR Spring 2020 month to 4 so Cultivar (whether field is in potato or not) is not NA
+jim.info.s[which(jim.info.s$State=="OR" & jim.info.s$Year==20 & jim.info.s$Month=="3"),"Month"] <- "4" 
+
+jim.info.s$Month <- as.numeric(jim.info.s$Month) # more character to numeric
+```
+
+#### define functions
+```{r}
+# plot.biomarkers takes a phyloseq object (of counts, not already transformed to percent abundances etc), 
+# a list of ASVs, and a taxonomic level to plot them by
+# it returns a bar plot showing the percent abundances of those ASVs colored by the specified taxonomic level,
+# across all the samples in the ps object. 
+plot.biomarkers <- function(ps, biomarkerlist, taxlevel){
+  
+  # transform counts to percent abundances
+  ps <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU) * 100)
+  
+  # calculate mean percent abundances for all biomarker ASVs
+  num <- vector("numeric") # define a numeric vector
+  for (i in biomarkerlist) {num[i] <- mean(otu_table(ps)[,i])}
+  
+  # obtains the row numbers corresponding to biomarker ASVs
+  asvs.to.subset <- vector("integer") # define an integer vector
+  for (i in names(num)) {asvs.to.subset[i] <- which(rownames(tax_table(ps))==i)} 
+  
+  # subset taxonomy and ASV tables
+  bmtt <- data.frame(tax_table(ps)[asvs.to.subset,])
+  bmtt$ASV <- rownames(bmtt)
+  bmtt <- as.matrix(bmtt)
+  bmasvt <- otu_table(ps)[,names(num)] 
+  
+  # make a new phyloseq object
+  ps.bm <- phyloseq(tax_table(bmtt), 
+                 sample_data(ps),
+                 otu_table(bmasvt, taxa_are_rows = FALSE))
+  
+  # make a barplot of % abundances across all samples
+  bm.barplot <- plot_bar(ps.bm, fill=taxlevel)+
+    geom_bar(stat="identity", position="stack")+
+    scale_y_continuous("% Abundance")+
+    theme(axis.text.x = element_blank())+
+    facet_grid(~general_category, scales = "free", space = "free")
+
+  return(bm.barplot) # return the plot
+}
+
+# drop_ghost_asvs drops ASVs that are not present in any samples- but are still kept because you've 
+# subsetted samples within a larger phyloseq object. This returns the phyloseq object with the subsetted count table.
+drop_ghost_asvs <- function(ps){
+  
+  # extract the count table from the phyloseq, with ASVs as columns
+    if(taxa_are_rows(ps)){counts <- t(ps@otu_table)} else{ # write count table with ASVs as rows
+    counts <- ps@otu_table
+    }
+  # remove empty rows corresponding to ASVs that are present in 0 samples
+  counts <- counts[,colSums(counts)>0]
+  
+  # write the count table back in
+  otu_table(ps) <- counts # drops all zero-count ASVs from the tax table and refseq as well, in contrast to 'ps@otu_table <- counts'
+  return(ps)
+}
+
+# subset_occupancy drops ASVs detected in less than a certain proportion of the samples
+# all it takes is a phyloseq object. it drops the ASVs below the occupancy cutoff, and moves their counts to 
+# a "summing" column. Tax table now has a summing column as well. Output is a phyloseq object. 
+subset_occupancy <- function(ps, occ_cutoff){
+  
+  # first, calculate occupancy of each ASV (proportion of samples detected in, from 0 to 1)
+  occ <- vector("numeric")
+    for (i in 1:ncol(ps@otu_table)) {
+      occ[i] <- sum(ps@otu_table[,i] != 0)/nrow(ps@otu_table[,i])
+    }
+  # write ASV names
+  names(occ) <- colnames(ps@otu_table)
+    
+  # select ASVs to keep based on occupancy 
+  keep.asvs <- occ[which(occ >= (occ_cutoff))] # keep only the ASVs above the cutoff
+  
+  # print some useful information
+  cat((length(keep.asvs)), "features are kept. \n")
+  
+  # subset the count table to maintain compositionality
+  keep.table <- ps@otu_table[,names(keep.asvs)] # the kept ASVs, which does not include a summing column
+  drop.table <- ps@otu_table[,setdiff(colnames(ps@otu_table), names(keep.asvs))] # the dropped ASVs
+  summing <- rowSums(drop.table) # add up counts for dropped features to make a summing column
+  keep.new <- cbind(keep.table, summing) # add new summing to the keep table
+  
+  # make a subsetted tax_table
+  taxa <- tax_table(ps)[names(keep.asvs),] # with only the kept ASVs over the occupancy cutoff
+  summing <- c("Summing", rep(NA, times = ncol(taxa)-1))
+  taxa2 <- rbind(taxa, summing)
+    
+  # put the new count table and tax table into a new ps object
+  # we must say goodbye to our refseq here because "summing" doesn't have a sequence associated with it.
+  new.ps <- phyloseq(sample_data(ps),
+                     otu_table(keep.new, taxa_are_rows = FALSE),
+                     tax_table(taxa2))
+  return(new.ps)
+}
+
+# transform_clr takes a phyloseq object and transforms the count table using a centered-log-ratio
+# it spits out a phyloseq object with transformed counts.
+transform_clr <- function(ps){
+  counts.clr <- as.matrix(clr(ps@otu_table))
+  ps.new <- phyloseq(otu_table(counts.clr, taxa_are_rows = FALSE),
+                     tax_table(ps),
+                     sample_data(ps))
+  cat("Counts transformed with CLR. \n")
+  return(ps.new)
+}
+
+# merge_with_jim_data takes as input a phyloseq object and a dataframe of objective 1 data that Jim has curated, which can be subsetted 
+# it writes data from Jim's spreadsheet into the corresponding phyloseq object, based on combinations
+# make sure jim's data is cleaned up according to the steps above!
+merge_with_jim_data <- function(ps, jim.info.subset){
+  df <- left_join(data.frame(ps@sam_data), jim.info.subset, 
+                by = c("state" = "State", "objective" = "Objective", "rotation" = "Rotation",
+                       "plot" = "Plot", "year" = "Year", "month" = "Month")) # merges 
+  #the unique combo of columns from phyloseq sample data and jim's data
+  rownames(df) <- rownames(ps@sam_data) # ok as long as the rows are in the same order, which they are
+  
+  # put df into the sample_data.
+  sample_data(ps) <- df # this also automatically drops the ghost ASVs and refsequences from the ps object
+  return(ps)
+}
+```
+
+## Inspect direction of treatment influence on treatment-yield ASVs  
+This narrowed down the ASVs from its.asvs and bact.asvs into the ones found in all.trt.yld.asvs. See also doc 40.Rmd, which plotted ITS and 16S ASVs separately (before filtering out the ones that decreased in the particular treatment) and then together.  
+
+#### ITS
+```{r, eval=FALSE}
+# see which rotation they correspond to 
+its.yield.df %>% filter(site == "OR" & ASV %in% c("ASV416", "ASV2495"))
+
+# get the phyloseq object
+ps1 <- its.ps.list[["ME.ITS.ps"]] %>% 
+  subset_samples(year == 22 & !is.na(Total.yield))
+
+# plot the treatment-influenced ASVs
+plot.biomarkers(ps1, c("ASV1642"), "ASV")+
+  facet_grid(~general_category, scales = "free", space = "free")+
+  scale_fill_discrete()
+```
+
+#### Inspect Sordariomycete Class
+```{r, eval=FALSE}
+ps2 <- its.ps.list[["MN.ITS.ps"]] %>% 
+  subset_samples(year == 22 & !is.na(Total.yield)) %>% 
+  tax_glom(taxrank = "Class")
+
+ps2 <- transform_sample_counts(ps2, function(OTU) OTU/sum(OTU) * 100) %>% 
+  subset_taxa(Class == "Sordariomycetes")
+
+plot_bar(ps2, fill= "Class")+
+    geom_bar(stat="identity", position="stack")+
+    scale_y_continuous("% Abundance")+
+    theme(axis.text.x = element_blank())+
+    facet_grid(~general_category, scales = "free", space = "free")
+```
+
+#### 16S by amendment, where we saw the most ASVs.   
+```{r, eval=FALSE}
+# Idaho
+asvs.to.plot <- bact.asvs %>% filter(site == "ID" & treatment == "Amended") %>% pull(ASV)
+
+# see which rotation they correspond to 
+asvs.to.plot <- bact.yield.df %>% filter(ASV %in% asvs.to.plot & site == "ID" & rotation == 3) %>% pull(ASV)
+
+asvs.to.plot <- c("ASV6")
+
+ps4 <- bact.ps.list[["ID.16S.ps"]] %>% 
+  subset_samples(year == 22 & !is.na(Total.yield))
+
+plot.biomarkers(ps4, asvs.to.plot, "ASV")+
+  facet_grid(~general_category, scales = "free", space = "free")+
+  scale_fill_discrete()
+
+# Oregon 
+asvs.to.plot <- bact.asvs %>% filter(site == "OR" & treatment == "Amended") %>% pull(ASV)
+
+# see which rotation they correspond to 
+asvs.to.plot <- bact.yield.df %>% filter(ASV %in% asvs.to.plot & site == "OR" & rotation == 2) %>% pull(ASV)
+
+ps4 <- bact.ps.list[["OR.16S.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 2 & !is.na(Total.yield))
+
+plot.biomarkers(ps4, asvs.to.plot[18:19], "ASV")+
+  facet_grid(~general_category, scales = "free", space = "free")+
+  scale_fill_discrete()
+```
+
+#### 16S one-offs
+```{r, eval=FALSE}
+# specify the ASVs to investigate
+asvs.to.plot <- c("ASV331")
+
+# see which rotation they correspond to 
+bact.yield.df %>% filter(ASV %in% asvs.to.plot & site == "ND")
+
+# subset a phyloseq to include just the samples from that year & rotation
+ps4 <- bact.ps.list[["MN.16S.ps"]] %>% 
+  subset_samples(year == 22 & !is.na(Total.yield))
+  
+plot.biomarkers(ps4, asvs.to.plot, "ASV")+
+  facet_grid(~general_category, scales = "free", space = "free")+
+  scale_fill_discrete()
+```
+
+From filtering these, it appeared that there were several bacteria in OR 2-yr and ID 3-yr rotations that increased in amended treatments and were positively associated with yields. Fumigations also increased yields here, but without influencing as many ASVs. Only one fumigation-influenced yield-associated ASV decreased in the fumigated treatment, which was ASV1428 (Chryseolinea sp, 16S) in ID.  
+
+## Tracking consortia over time and space  
+
+#### Which season/rotation are these treatment/yield ASVs associated with?      
+I looked for all combinations of bacterial and eukaryotic ASVs across all sites, treatments, and rotations, separating ASV by which season (spring or summer) they were yield-associated with.  Results are in the excel spreadsheet treatment_asv_yield_modeling.  One example given here:   
+```{r}
+# filter trt-yld-ASVs by site and treatment... ITS
+lookup <- all.trt.yld.asvs %>% filter(site == "MI" & treatment == "Amended") %>% pull(ASV)
+its.yield.df %>% filter(ASV %in% lookup & lm_mult_r_sq >= 0.2 & site == "MI")
+
+# same for 16S
+bact.yield.df %>% filter(ASV %in% lookup & lm_mult_r_sq >= 0.2 & site == "MI")
+```
+
+
+#### OR and ID amendment-associated bacterial consortia   
+```{r}
+# get vectors of OR or ID amendment/yield-associated bacterial ASVs
+or.amd.bact.asvs <- all.trt.yld.asvs %>% filter(site == "OR" & treatment == "Amended") %>% pull(ASV)
+id.amd.bact.asvs <- all.trt.yld.asvs %>% filter(site == "ID" & treatment == "Amended") %>% pull(ASV)
+
+# separate them by rotation
+or.amd.bact.2yr.asvs <- bact.yield.df %>% filter(ASV %in% or.amd.bact.asvs & site == "OR" & rotation == 2) %>% pull(ASV)
+or.amd.bact.3yr.asvs <- bact.yield.df %>% filter(ASV %in% or.amd.bact.asvs & site == "OR" & rotation == 3) %>% pull(ASV)
+id.amd.bact.3yr.asvs <- bact.yield.df %>% filter(ASV %in% id.amd.bact.asvs & site == "ID" & rotation == 3) %>% pull(ASV) 
+
+### oregon bacterial consortium across BOTH rotations
+# subset phyloseq
+ps1 <- bact.ps.list[["OR.16S.ps"]] %>% 
+  subset_samples(!is.na(Total.yield))
+
+# add a year/treatment label
+ps1@sam_data$year_cat <- paste(ps1@sam_data$year, ps1@sam_data$general_category, sep = "_")
+  
+# plot over treatment and time
+plot.biomarkers(ps1, union(or.amd.bact.2yr.asvs, or.amd.bact.3yr.asvs), "ASV")+
+  facet_grid(~year_cat, scales = "free", space = "free")+
+  scale_fill_discrete()+
+  theme_bw()+ggtitle("OR amendment/yield bacteria")+
+  theme(axis.text.x = element_blank())
+
+### idaho 3-yr bacterial consortium
+# subset phyloseq
+ps2 <- bact.ps.list[["ID.16S.ps"]] %>% 
+  subset_samples(rotation == 3 & !is.na(Total.yield))
+
+# remember that Green Manure treatments are now classified as controls
+ps2@sam_data[which(ps2@sam_data$amendment == "Green Manure"),"general_category"] <- "Control"
+
+# add a year/treatment label
+ps2@sam_data$year_cat <- paste(ps2@sam_data$year, ps2@sam_data$general_category, sep = "_")
+  
+# plot over treatment and time
+id.3yr.amd.bact.gg <- plot.biomarkers(ps2, unique(id.amd.bact.3yr.asvs), "ASV")+
+  facet_grid(~year_cat, scales = "free", space = "free")+
+  scale_fill_discrete()+
+  theme_bw()+ggtitle("ID 3-yr amendment/yield bacteria")+
+  theme(axis.text.x = element_blank())
+id.3yr.amd.bact.gg
+```
+In both OR and ID, amendments stimulate these ASVs in the second potato year and increase their combined relative abundances from ~0.1% to ~0.3-0.4% of the community.   
+
+In MN1, ASV792 also increased in amendment treatments by the second potato year.  This and three other amendment-yield-positive ASVs were found across 6 sites total, so it seems they only appear to increase under certain treatments/circumstances.  See what I mean here:   
+
+```{r}
+all.trt.yld.asvs %>% filter(ASV %in% or.amd.bact.2yr.asvs) %>% dplyr::select(site, ASV, num_sites)
+```
+   
+#### OR brassica-yield-associated bacterial consortia    
+```{r}
+# get vectors of OR brassica/yield-associated bacterial ASVs
+or.brs.bact.asvs <- all.trt.yld.asvs %>% filter(site == "OR" & treatment == "Must.") %>% pull(ASV)
+
+# all but one are 3-yr
+or.brs.bact.3yr.asvs <- bact.yield.df %>% filter(ASV %in% or.brs.bact.asvs & site == "OR" & rotation == 3) %>% pull(ASV)
+
+# subset phyloseq
+ps3 <- bact.ps.list[["OR.16S.ps"]] %>% 
+  subset_samples(rotation == 3 & !is.na(Total.yield))
+
+# add a year/treatment label
+ps3@sam_data$year_cat <- paste(ps3@sam_data$year, ps3@sam_data$treatment_description, sep = "_")
+  
+# plot over treatment and time
+plot.biomarkers(ps3, or.brs.bact.3yr.asvs, "ASV")+
+  facet_grid(~year_cat, scales = "free", space = "free")+
+  scale_fill_discrete()+
+  theme_bw()+ggtitle("OR 3-yr brassica/yield bacteria")+
+  theme(axis.text.x = element_blank())
+```
+   
+These brassica-ASVs are all negatively-associated with yield, and clearly only in the second potato year.  
+
+#### ME amendment-yield-associated fungi    
+```{r}
+# get the asvs
+me.its.amd.asvs <- its.asvs %>% filter(site == "ME1" & treatment == "Amended") %>% pull(ASV)
+
+# all are 2-yr
+me.its.amd.asvs <- unique(its.yield.df %>% filter(ASV %in% me.its.amd.asvs & site == "ME" & rotation == 2) %>% pull(ASV))
+
+# subset phyloseq
+ps4 <- its.ps.list[["ME.ITS.ps"]] %>% 
+  subset_samples(rotation == 2 & !is.na(Total.yield))
+
+# add a year/treatment label
+ps4@sam_data$year_cat <- paste(ps4@sam_data$year, ps4@sam_data$general_category, sep = "_")
+  
+# plot over treatment and time
+plot.biomarkers(ps4, me.its.amd.asvs, "ASV")+
+  facet_grid(~year_cat, scales = "free", space = "free")+
+  scale_fill_discrete()+
+  theme_bw()+ggtitle("ME 2-yr amended/yield fungi")+
+  theme(axis.text.x = element_blank())
+```
+   
+These Ascomycete fungi increased over the two potato growing years, but were already higher in the first year. Notice though that their occupancy increases in the final year.   
+   
+#### MI amendment-yield-associated euks
+```{r}
+# get asvs
+mi.its.amd.asvs <- its.asvs %>% filter(site == "MI" & treatment == "Amended") %>% pull(ASV)
+
+# all are 3-yr
+mi.its.amd.asvs <- unique(its.yield.df %>% filter(ASV %in% mi.its.amd.asvs & site == "MI" & rotation == 3) %>% pull(ASV))
+
+# subset phyloseq
+ps5 <- its.ps.list[["MI.ITS.ps"]] %>% 
+  subset_samples(rotation == 3 & !is.na(Total.yield))
+
+# add a year/treatment label
+ps5@sam_data$year_cat <- paste(ps5@sam_data$year, ps5@sam_data$general_category, sep = "_")
+  
+# plot over treatment and time
+plot.biomarkers(ps5, mi.its.amd.asvs, "ASV")+
+  facet_grid(~year_cat, scales = "free", space = "free")+
+  scale_fill_discrete()+
+  theme_bw()+ggtitle("MI 3-yr amended/yield euks")+
+  theme(axis.text.x = element_blank())
+```
+   
+These euks in MI increased with treatment and time, but seemed to have had a bit of a head start in 2019.   
+
+### Pause for a mini-conclusion   
+Now we have a sense of WHICH yield-associated ASVs increased WHERE, in response to WHAT TREATMENTS. Next we should establish a causal model, particularly for the Amendment-associated treatments. Does amendment increase organic matter or other nutrients in the soil, which then increase abundances of these taxa? Or does amendment inoculate the soil with these taxa? (We might not be able to answer that). Or rather, how much does OM or nutrients explain the yield increase, and how much is it the taxa themselves?  And are the members of these consortia part of a co-occurring module?   
+
+For the brassica treatment, I suppose OM or C or pH or something else could be used, but I still don't know how brassica relates to yields.  
+
+For fumigated treatments, this is tricky because few soil taxa actually varied with this treatment.  The only yield-associated ASV that decreased in fumigated treatments does not seem to be a pathogen (on the contrary, it's implicated as a beneficial bacterium in combating fusarium wilt). So how would fumigation change yields through the microbiome? By changing something like alpha diversity or bacteria:fungi ratios?
+
+
+## Structural equation modeling (SEM)      
+
+### Scenario 1: Oregon bacterial consortia in response to amendment    
+From the 2-yr rotation only    
+
+#### Make a dataframe with the ASV, yield, and soil chemical data across samples.    
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps6 <- bact.ps.list[["OR.16S.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 2 & !is.na(Total.yield) & general_category != "Fumigated") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples 
+sub.df <- jim.info.s %>% filter(State == "OR" & Year == 22)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps6 <- merge_with_jim_data(ps6, sub.df)
+
+# see which season the ASVs whose abundances we want to include were yield-associated with
+bact.yield.df %>% filter(ASV %in% or.amd.bact.2yr.asvs & site == "OR") %>% dplyr::select(ASV, season) 
+
+# subset the ASVs by season, then subset ASVs below 50% occupancy and transform counts to CLR
+or.amd.bact.summer.asvs <- bact.yield.df %>% 
+  filter(ASV %in% or.amd.bact.2yr.asvs & site == "OR" & season == "summer") %>% 
+  pull(ASV)
+
+# keep only the summer samples
+ps6 <- ps6 %>% subset_samples(season == "Summer")%>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the 2 yr rotation SUMMER associated ASVs to the sample data 
+df1 <- cbind(data.frame(ps6@sam_data), ps6@otu_table[,or.amd.bact.summer.asvs])
+
+# make a consortium column of the sum of the ASVs
+df1$consortium <- rowSums(df1[,startsWith(colnames(df1), "ASV")])
+```
+
+#### Check our premises   
+```{r}
+# is yield higher in amended?
+ggplot(df1, aes(Amended, Total.yield))+geom_jitter(width = 0.1) # yes
+
+# is consortium higher in amended? 
+ggplot(df1, aes(Amended, consortium))+geom_jitter(width = 0.2) # yes
+
+# is OM higher in amended?
+ggplot(df1, aes(Amended, OM....))+geom_jitter(width = 0.1) # yes (one outlier)
+
+# also Solvita, pH, P were noticeably higher in amended
+ggplot(df1, aes(Amended, Solvita..ppm.))+geom_jitter(width = 0.1) # yes
+
+# convert amended treatment to 0/1
+df1$Amended <- as.integer(as.logical(df1$Amended))
+```
+
+#### Modeling   
+```{r}
+### tidying up the dataframe 
+# remove NA cols
+df1 <- df1 %>% dplyr::select(-cover_2020, -green_cov_pct_pre_kill, -Total.C...., -Total.organic.C....)
+
+# there was one outlier OM value at 2.8, next highest OM recorded in Oregon any time was 1.8
+# also keep only Norkotah cultivar
+df1.no <- df1 %>% filter(`OM....` < 2 & cultivar == "Norkotah")
+
+### evaluate linear models to include in the SEM
+# first equation: soil organic amendment increases OM%
+# since amendment is encoded as a 0/1, can use linear model
+amend <- lm(`OM....` ~ Amended, df1.no) 
+summary(amend) # it's NOT a bad model
+summary(lm(Total.yield ~ Amended, df1.no)) # Amendment itself DOES explain total yield
+
+# next equation: OM increases soil respiration
+ompct <- lm(`Solvita..ppm.` ~ `OM....`, df1.no)
+summary(ompct) # it's a very good model
+summary(lm(Total.yield ~ `OM....`, df1.no)) # OM does not explain total yield
+
+summary(lm(Total.yield ~ `Solvita..ppm.`, df1.no)) # respiration does not explain total yield
+
+# soil respiration increases consortium abundance
+resp <- lm(consortium ~ `Solvita..ppm.`, df1.no)
+summary(resp) # it's a good model
+
+# next, consortium abundance increases total yield
+cons <- lm(Total.yield ~ consortium, df1.no)
+summary(cons) 
+
+# BACK UP: does amendment explain consortium?
+trt.on.cons <- lm(consortium ~ Amended, df1.no) # yes indeedy
+summary(trt.on.cons)
+
+# add amendment back into the consortium-yield model
+cons2 <- lm(Total.yield ~ consortium + Amended, df1.no)
+summary(cons2)
+
+### Build SEMs
+# SEM 1: amendment increases OM, which increases respiration, which increases consortium, then total yields
+psem1 <- psem(amend, ompct, resp, cons)  
+coefs(psem1)
+fisherC(psem1) # rats it's bad. perhaps its overfitted?
+# plot(psem1)
+
+# SEM 2: amendment increases consortium, which increases total yields
+psem2 <- psem(trt.on.cons, cons)  
+coefs(psem2)
+fisherC(psem2) # bad
+# plot(psem2)
+
+# SEM 3: amendment increases consortium and soil chem, soil chem increases(?) consortium, 
+# and amendment and consortium increase yield
+# didnt get anywhere because none of the soil chem parameters increases consortium independently of Amendment
+psem3 <- psem(lm(OM.... ~ Amended, df1.no),
+              lm(consortium ~ Amended + OM...., df1.no),
+              lm(Total.yield ~ consortium + Amended, df1.no))
+fisherC(psem3)
+coefs(psem3)
+summary(psem3)$AIC # 155 for OM
+
+# scenario 4 is not an SEM, rather a lm where amendment directly impacts yield as well (this cannot be modeled in SEM)
+lm4 <- lm(Total.yield ~ Amended + consortium, df1.no)
+summary(lm4)
+extractAIC(lm4) # gives AIC of 86, which is lower than the PSEM
+```
+   
+The initial approach I took was to examine OR 2-yr rotation samples in 2022 only, using the "consortium" of the bacterial ASVs that were positively associated with organic amendments and yields in the 2-yr rotation. I build two SEMs of lms, one where amendment --> soil OM% --> respiration --> consortium abundance --> Total yield, and another where amendment --> consortium --> Total yield. I could see the first one being considered as overfitted, but both SEMs I made had very low (ie BAD) p-values, so maybe their power was too low anyway.  
+
+Next I went back and plotted OR samples in 2022, from both rotations, using the combination of bacterial ASVs that were positively associated with organic amendments and yields across both rotations. These ASVs were still much higher in the 2022 amended samples regardless of rotation, so I thought it fair to combine them into one analysis. However, by including samples (and ASVs) from both rotations, the association between consortium abundance and total yield became insignificant. I tweaked this to remove the one negative ASV, and then the model became just-barely significant. 
+
+I also checked to see whether Amendment also directly affected Total yield, but this yielded NA's for p-value and Fisher C. THIS CAN BE BETTER MODELED WITH LM: Total.yield ~ Amended + consortium. Curiously, Amendment had a slightly negative relationship with yield, but at the same time increased the consortium which increased yields. Either way, I probably shouldn't bother justifying the addition of the 3-yr rotation where amendment did nothing for yields: we just don't have enough observations to make a good model in the 2-yr rotation where amendment actually increased yields.     
+
+The reason I saw direct relationships between treatments and yields (in figure 1) was that I was comparing each treatment accordingly to its control. Previously I had not been doing this in the SEM section (I was comparing Amendments to non-Amendments, and the latter included Fumigated samples).  
+
+My conclusion here is that amendment increases the consortium, which increases the yield MORESO than the amendment's direct effects on yields, which were actually negative. Amendment increased OM, but OM did not increase consortium abundance, nor did solvita, N or P. Something else that is NOT related to these soil chem parameters is stimulating this yield-positive consortium.  
+
+### Scenario 2: Idaho 3-yr rotation bacterial consortia in response to amendment   
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps7 <- bact.ps.list[["ID.16S.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & Fumigated == FALSE) 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples 
+sub.df <- jim.info.s %>% filter(State == "ID" & Year == 22 & Rotation == 3)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps7 <- merge_with_jim_data(ps7, sub.df)
+
+# All the ASVs were summer-associated with yield
+bact.yield.df %>% filter(ASV %in% id.amd.bact.3yr.asvs & site == "ID") %>% dplyr::select(ASV, season) 
+
+# subset the ASVs by season
+id.amd.bact.summer.asvs <- bact.yield.df %>% 
+  filter(ASV %in% id.amd.bact.3yr.asvs & site == "ID" & season == "summer") %>% 
+  pull(ASV)
+
+# keep only the summer samples, remove any below 50% occupancy, and transform abundances
+ps7 <- ps7 %>% subset_samples(season == "Summer") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the summer associated ASVs to the sample data 
+df2 <- cbind(data.frame(ps7@sam_data), ps7@otu_table[,id.amd.bact.summer.asvs])
+
+# make a consortium column of the sum of the ASVs
+df2$consortium <- rowSums(df2[,startsWith(colnames(df2), "ASV")])
+
+# remember that Green Manure treatments are now classified as controls
+df2[which(df2$amendment == "Green Manure"),"general_category"] <- "Control"
+
+# control for cultivar: keep only Norkotahs
+df2 <- df2 %>% filter(cultivar == "Norkotah")
+
+### check our premises
+# is yield higher in amended?
+ggplot(df2, aes(Amended, Total.yield))+geom_jitter(width = 0.1) # yeah
+
+# is consortium higher in amended? 
+ggplot(df2, aes(Amended, consortium))+geom_jitter(width = 0.2) # yes
+
+# is OM higher in amended?
+ggplot(df2, aes(Amended, OM....))+geom_jitter(width = 0.1) # yes 
+
+# convert amended treatment to 0/1
+df2$Amended <- as.integer(as.logical(df2$Amended))
+
+
+### tidying up the dataframe 
+# remove NA cols
+df2 <- df2 %>% dplyr::select(-cover_2019, -green_cov_pct_pre_kill, -Total.C...., 
+                             -Total.organic.C...., -VPPG, -Root.Lesion.100.cc)
+
+### evaluate linear models to include in the SEM
+# first equation: soil organic amendment increases OM % (but not yield)
+# since amendment is encoded as a 0/1, can use linear model
+amend <- lm(`OM....` ~ Amended, df2) 
+summary(amend) # amendment increases OM
+summary(lm(Total.yield ~ Amended, df2)) # Amendment itself explains total yield
+
+# OM increases consortium abundance and yield
+org <- lm(consortium ~ `OM....`, df2)
+summary(org) # it's a good model
+summary(lm(Total.yield ~ `OM....`, df2)) 
+
+# next, consortium abundance increases total yield 
+cons <- lm(Total.yield ~ consortium, df2)
+summary(cons) # 
+
+amd.to.cons <- lm(consortium ~ Amended, df2)
+summary(amd.to.cons) # amendment DOES influence consortium
+
+# so make another model where amendment and OM both increase consortium
+om.amd <- lm(consortium ~ `OM....` + Amended, df2)
+summary(om.amd) 
+
+# amendment increases yield through consortium
+summary(lm(Total.yield ~ consortium + OM...., df2))
+
+### Build SEMs
+# SEM 1: amendment increases OM, which increases consortium, then total yields
+psem1 <- psem(amend, org, cons)  
+coefs(psem1)
+fisherC(psem1) # model is bad
+# plot(psem1)
+
+# SEM 2: amendment increases OM, OM and amendment increase consortium, and consortium increases total yields
+psem2 <- psem(amend, om.amd, cons)  
+coefs(psem2)
+fisherC(psem2) # it's good, though links to OM are not significant
+# plot(psem2)
+
+# SEM 3: amendment and OM increase consortium, consortium increases yields
+psem3 <- psem(om.amd, cons)
+coefs(psem3)
+fisherC(psem3) # not as good as SEM2
+
+# SEM 4: amendment increases consortium, consortium increases yields
+psem4 <- psem(amd.to.cons, cons)  
+coefs(psem4)
+fisherC(psem4) 
+# plot(psem4) 
+
+# which SEM is best? 
+summary(psem2)$AIC # lower AIC: better model 
+summary(psem3)$AIC 
+
+# summarize our best model
+summary(psem2)
+
+# test directed separation for psem2
+summary(lm(Total.yield ~ `OM....` + consortium, df2))
+summary(lm(Total.yield ~ Amended + consortium, df2))
+# they suggest there should NOT be paths directly from OM or Amendment directly to Total yield. 
+
+# now that green manure is a "control", can we improve this model?
+psem2.1 <- psem(lm(P.Bray..ppm. ~ Amended, df2),
+                lm(pH ~ Amended, df2),
+                lm(consortium ~ P.Bray..ppm. + pH, df2),
+                lm(Total.yield ~ consortium, df2))  
+fisherC(psem2.1) 
+summary(psem2.1)$AIC
+```
+   
+Here in Idaho in the 3-yr rotation, Amendment increases consortium abundance, and consortium abundance increases yield. Now that I understand we want a LOWER AIC (lol), keeping OM gives the best model even though the paths between amendment and OM, and OM and consortium abundance are not themselves statistically significant at p < 0.05. The interpretation would be that the amendment increased the abundance of consortia members and that the increase in consortia stimulated tuber yields. OM may have a minimal/marginal influence here because keeping these paths to/from it led to a better model. If we had higehr n we might find OM significant.  
+
+Still, in the discussion, we should mention something like "further research should focus on determining the mechanisms of causality behind how adding organic matter could lead to the promotion of yield-associated microbiome members".     
+
+Might be worth it to develop a good model from another site (like MI or ME) that might show individual taxa or fungi or both. This way we could say that while predicting how soil treatments affect microbiomes and yields remains a challenge, these patterns are not anomalous or restricted to certain field sites, or bacteria vs fungi.  
+
+### Scenario 3: ME 2-yr rotation ITS in response to amendment.   
+The 3-yr rotation is the one that had the yield increase, but the 2-yr one had the two amendment-influenced, yield-positive fungal ASVs.  
+
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps8 <- its.ps.list[["ME.ITS.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 2 & !is.na(Total.yield) & general_category != "Fumigated") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples
+sub.df <- jim.info.s %>% filter(State == "ME" & Year == 22 & Rotation == 2)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps8 <- merge_with_jim_data(ps8, sub.df)
+
+# see which season the ASVs whose abundances we want to include were yield-associated with
+its.yield.df %>% filter(ASV %in% c("ASV501", "ASV1906") & site == "ME") %>% dplyr::select(ASV, season) 
+
+# they're both in spring
+me.amd.its.spring.asvs <- c("ASV501", "ASV1906")
+
+# keep only the spring samples, drop, and transform
+ps8 <- ps8 %>% subset_samples(season == "Spring") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the spring associated ASVs to the sample data 
+df3 <- cbind(data.frame(ps8@sam_data), ps8@otu_table[,me.amd.its.spring.asvs])
+
+# make a consortium column of the sum of the ASVs
+df3$consortium <- rowSums(df3[,startsWith(colnames(df3), "ASV")])
+
+# since we have two cultivars of nearly equal abundance, control for cultivar as a factor
+df3$cultivar <- ifelse(df3$cultivar == "Burbank", 0, 
+                       ifelse(df3$cultivar == "Caribou", 1, NA))
+
+### check our premises
+# is yield higher in amended?
+ggplot(df3, aes(Amended, Total.yield))+geom_jitter(width = 0.1) # yeah
+
+# is consortium higher in amended? 
+ggplot(df3, aes(Amended, consortium))+geom_jitter(width = 0.2) # yes
+
+# is OM higher in amended?
+ggplot(df3, aes(Amended, OM....))+geom_jitter(width = 0.1) # maybe a little bit
+
+# convert amended treatment to 0/1
+df3$Amended <- as.integer(as.logical(df3$Amended))
+
+
+### tidying up the dataframe 
+# remove NA cols
+df3 <- df3 %>% dplyr::select(-cover_2020, -green_cov_pct_pre_kill, -Total.C...., 
+                             -Total.organic.C...., -VPPG, -Root.Lesion.100.cc, -rotation_comparison)
+
+### try a lm first
+lm5 <- lm(Total.yield ~ Amended + consortium + cultivar, df3)
+summary(lm5) # it's legit
+extractAIC(lm5) # AIC of 166
+
+### Build SEM
+# amendment did NOT increase OM or Nitrate, so we can't really work with anything here
+psem1 <- psem(lm(Nitrate.N..ppm. ~ Amended, df3),
+              lm(consortium ~ Nitrate.N..ppm., df3),
+              lm(Total.yield ~ consortium, df3))  
+coefs(psem1)
+fisherC(psem1) # model is good, individual trends are borderline
+
+# what if amendment directly stimulated consortium, which increased yields?
+psem2 <- psem(lm(consortium ~ Amended, df3),
+              lm(Total.yield ~ consortium, df3)) 
+fisherC(psem2) # valid
+coefs(psem2) # valid and good
+```
+    
+In Maine 2-yr rotation, Amendment increases consortium, which increases yield. No direct path between Amended and total yield, or path through OM or anything.  
+    
+### Scenario 4: MI 3-yr rotation ITS in response to amendment.   
+    
+```{r}
+# inspect MI amendment-yield-associated ITS ASVs
+view(its.yield.df %>% filter(ASV %in% c("ASV80", "ASV161", "ASV1099", "ASV1194") & site == "MI"))
+# all in spring 3-yr
+
+# subset the phyloseq object by site, rotation, and year, and leave out controls- must compare amended/fumigated to fumigated!
+ps9 <- its.ps.list[["MI.ITS.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & general_category != "Control") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples
+sub.df <- jim.info.s %>% filter(State == "MI" & Year == 22 & Rotation == 3)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps9 <- merge_with_jim_data(ps9, sub.df)
+
+# define ASVs to model
+mi.amd.its.spring.asvs <- c("ASV80", "ASV161", "ASV1099", "ASV1194")
+mi.amd.its.summer.asvs <- c("ASV1099", "ASV1194")
+
+# keep only the spring samples, drop, and transform
+ps9 <- ps9 %>% subset_samples(season == "Summer") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the spring associated ASVs to the sample data 
+df4 <- cbind(data.frame(ps9@sam_data), ps9@otu_table[,mi.amd.its.summer.asvs])
+
+# make a consortium column of the sum of the ASVs
+df4$consortium <- rowSums(df4[,startsWith(colnames(df4), "ASV")])
+
+
+### check our premises
+# Yield is higher in amended, consortium as well
+# What about any soil characteristics? not OM, solvita, N, P, or anything. maybe pH but still not significant
+
+# convert amended treatment to 0/1
+df4$Amended <- as.integer(as.logical(df4$Amended))
+
+### tidying up the dataframe 
+# remove NA cols
+df4 <- df4 %>% dplyr::select(-cover_2019, -cover_2020, -green_cov_pct_pre_kill, -Total.C...., 
+                             -Total.organic.C...., -VPPG, -Root.Lesion.100.cc, -rotation_comparison)
+
+# encode cultivar as a dummy variable
+df4$cultivar <- ifelse(df4$cultivar == "Superior", 0,
+                       ifelse(df4$cultivar == "Burbank", 1, 2))
+
+# which soil chemical constituents are different across treatments?
+df4 %>% select_if(is.numeric) %>% 
+  select(pH, Nitrate.N..ppm., NH4.N..ppm., P.Olsen..ppm., P.Bray..ppm., OM...., Solvita..ppm., POX.C..ppm.) %>% 
+  map_df(~ broom::tidy(t.test(. ~df4$general_category)), .id = "var") %>% 
+  filter(p.value < 0.05) %>% 
+  pull(var) # none
+
+# linear modeling
+lm6 <- lm(Total.yield ~ consortium + Amended + cultivar, df4)
+summary(lm6)
+
+### Build SEM
+# amendment directly stimulates consortium, which increases yields
+psem1 <- psem(lm(consortium ~ Amended + cultivar, df4),
+              lm(Total.yield ~ consortium + cultivar, df4)) 
+fisherC(psem1) # valid
+coefs(psem1) # amendment does increase consortium in summer, but not spring
+
+# but amendment itself DOES stimulate yields. 
+summary(lm(consortium ~ Amended, df4))
+
+# is this consortium even enriched in amendment here? 
+# plot over treatment and time
+
+ps10 <- its.ps.list[["MI.ITS.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & general_category == "Amended/Fumigated")
+
+ps10@sam_data$year_cat <- paste(ps10@sam_data$year, ps10@sam_data$general_category, sep = "_")
+
+plot.biomarkers(ps10, mi.amd.its.spring.asvs, "ASV")+
+  facet_grid(~season, scales = "free", space = "free")+
+  scale_fill_discrete()+
+  theme_bw()+ggtitle("MI 3-yr amended/yield euks")+
+  theme(axis.text.x = element_blank())
+```
+    
+In MI 3-yr ITS spring, the four ASVs together didn't make a valid model, as amendment didn't even increase the consortium. Plotting their % abundances shows they all increased from spring to summer. Two of them also were summer-associated, so I went back to try and model those.   
+
+
+#### Other scenarios
+Here is where I'm checking for trends more exhaustively across sites, treatments, and rotations.  
+Not interested in putting any soil data here, I just want to know, in either spring or summer of a growing season, was there evidence for a treatment increasing any members of the microbiome that then influenced yield?  And if so, is there a direct link between treatment and yield, or is it only through the microbiome???  
+
+```{r}
+# subset the phyloseq object by site, rotation, year, and season, and drop ASVs and transform counts
+ps <- bact.ps.list[["OR.16S.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) &
+                   season == "Spring" & general_category != "Fumigated") %>%  
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# define ASVs to model
+asvs.to.model <- c("ASV270", "ASV2762", "ASV3009", "ASV3745", "ASV574")
+# asvs.to.model <- "ASV1705"
+
+# add in the abundance of the spring associated ASVs to the sample data 
+df <- cbind(data.frame(ps@sam_data), ps@otu_table[,asvs.to.model])
+# df$consortium <- rowSums(df[,startsWith(colnames(df), "ASV")])
+
+# make a consortium column of the sum of the ASVs
+df$consortium <- rowSums(df[,startsWith(colnames(df), "ASV")])
+
+# convert amended treatment to 0/1
+df$Fumigated <- as.integer(as.logical(df$Fumigated))
+df$Amended <- as.integer(as.logical(df$Amended))
+df$Brassica <- as.integer(as.logical(df$Brassica))
+
+df <- df %>% 
+  filter(cultivar == "Norkotah") %>% 
+  dplyr::select(-cover_2019, -cover_2020, -VPPG, -Root.Lesion.100.cc, 
+                           -rotation_comparison, -green_cov_pct_pre_kill)
+
+### build lm
+summary(lm(Total.yield ~ consortium + Brassica, df))
+```
+
+#### Other scenarios but I do want to examine for soil data too   
+**OR, mustard treatment, 3-yr rotation, bacterial ASVs**
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps <- bact.ps.list[["OR.16S.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & general_category != "Fumigated") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples
+sub.df <- jim.info.s %>% filter(State == "OR" & Year == 22 & Rotation == 3)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps <- merge_with_jim_data(ps, sub.df)
+
+# see which season the ASVs whose abundances we want to include were yield-associated with
+bact.yield.df %>% filter(ASV %in% c("ASV270", "ASV2762", "ASV3009", "ASV3745", "ASV574") & site == "OR") %>% dplyr::select(ASV, season) 
+
+# they're both in spring
+or.must.bact.spring.asvs <- c("ASV270", "ASV2762", "ASV3009", "ASV3745", "ASV574")
+
+# keep only the spring samples, drop, and transform
+ps <- ps %>% subset_samples(season == "Spring") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the spring associated ASVs to the sample data 
+df5 <- cbind(data.frame(ps@sam_data), ps@otu_table[,or.must.bact.spring.asvs])
+
+# make a consortium column of the sum of the ASVs
+df5$consortium <- rowSums(df5[,startsWith(colnames(df5), "ASV")])
+
+# Cultivar alert: most are Norkotahs but some Burbank controls
+
+# which chem differs?
+df5 %>% select_if(is.numeric) %>% 
+  select(pH, Nitrate.N..ppm., NH4.N..ppm., P.Olsen..ppm., P.Bray..ppm., OM...., Solvita..ppm., POX.C..ppm.) %>% 
+  map_df(~ broom::tidy(t.test(. ~df5$Brassica)), .id = "var") %>% 
+  filter(p.value < 0.05) %>% 
+  pull(var) # pH, Nitrate N 
+
+# drop all-NA cols  
+df5 <- df5[, colSums(is.na(df5)) != nrow(df5)]
+
+# drop burbank cultivars and convert Brassica column from logical to numeric
+df5.nork <- df5 %>% filter(cultivar == "Norkotah")
+df5.nork$Brassica <- as.numeric(as.logical(df5.nork$Brassica))
+
+summary(lm(consortium ~ Brassica, df5.nork)) # brassica strongly inc. consortium, dec. pH, and inc. nitrate
+summary(lm(consortium ~ Nitrate.N..ppm., df5.nork)) # nitrate, but not pH, increases consortium
+summary(lm(Total.yield ~ consortium, df5.nork)) # consortium, but NOT Brassica, nitrate, or pH, affects yields (negatively)
+
+psem5 <- psem(lm(consortium ~ Brassica + pH, df5.nork),
+     lm(pH ~ Brassica, df5.nork),
+     lm(Total.yield ~ consortium, df5.nork))
+coefs(psem5)
+fisherC(psem5) # valid
+# plot(psem5)
+summary(psem5)$AIC
+
+# Mustard effects on yields
+or.3yr.df <- jim.info %>% 
+  filter(State == "OR" & Rotation == 3 & Year == 22 & Cultivar == "Russet Norkotah") %>% 
+  dplyr::select(State, Objective, Rotation, Plot, Year, Month, `Treatment #`, `Total yield.1`)
+for (i in 6:8){or.3yr.df[,i] <- as.numeric(or.3yr.df[,i])} # convert columns that should be numeric into numeric
+
+# treatments 
+or.3yr.df <- or.3yr.df %>% 
+  mutate(trt = case_when(`Treatment #` == 2 ~ "control",
+                         `Treatment #` == 4 ~ "mustard",
+                         `Treatment #` == 5 ~ "compost",
+                         `Treatment #` == 6 ~ "compost_mustard"))
+
+# pull yields of mustard and non-mustard treatments
+mustard.ylds <- or.3yr.df %>% filter(Month == 6 & str_detect(trt, "mustard")) %>% pull(`Total yield.1`)
+non.mustard.ylds <- or.3yr.df %>% filter(Month == 6 & !str_detect(trt, "mustard")) %>% pull(`Total yield.1`)
+
+t.test(mustard.ylds, non.mustard.ylds) # they're actually NOT different. 
+mean(mustard.ylds) / mean(non.mustard.ylds)
+```
+
+The other (non-amendment) scenarios:      
+OR, mustard, 3-yr: Brassica increases nitrate, decreases pH, and increases consortium; consortium decreases yields. Best SEM included pH, but not nitrate.  
+
+#### OR, fumigation, 3-yr.   
+No soil chemical data changed with treatment, so same as before.   
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps <- its.ps.list[["OR.ITS.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & general_category != "Amended")
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples
+sub.df <- jim.info.s %>% filter(State == "OR" & Year == 22 & Rotation == 3)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps <- merge_with_jim_data(ps, sub.df)
+
+# keep only the spring samples, drop, and transform
+ps <- ps %>% subset_samples(season == "Summer") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the spring associated ASVs to the sample data 
+df6 <- cbind(data.frame(ps@sam_data), ps@otu_table[,"ASV2495"])
+
+# modeling
+summary(lm(ASV2495 ~ Fumigated + cultivar, df6))# ASV is affected by fumigation
+summary(lm(Total.yield ~ ASV2495 + Fumigated + cultivar, df6)) # ASV (but not fumigation) affects yield
+```
+
+ND, fumigation, 3-yr: Revisited, no model found.    
+
+
+## A figure showing the breakdown of scenarios across site, rotation, and treatment   
+```{r}
+# import the manually curated csv file showing the scenarios (treatment x site x rotation) where yields increased/decreased, and whether members of the microbiome could be modeled as influencing this 
+sem_summ <- read_csv(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/SEM_scenario_exhaustive_breakdown.csv")
+
+# reorder the labeling
+sem_summ$label <- factor(sem_summ$label, levels = c("treatment decreased yields through microbiome", 
+                                                     "treatment did not increase yield", 
+                                                     "treatment/microbiome had partial influence on yield", 
+                                                     "treatment increased yield irrespective of microbiome", 
+                                                     "treatment increased yields through microbiome"))
+
+sem_summ$site <- factor(sem_summ$site, levels = c("OR", "ID", "CO", "MN1", "MN2", "WI", "MI", "ME1"))
+
+# barplots showing counts of scenarios, by site and by treatment
+by.site.gg <- ggplot(sem_summ, aes(site, fill = label))+
+  geom_bar()+
+  scale_x_discrete("")+scale_y_continuous("Counts")+
+  scale_fill_manual("", values = c('#fc8d62', "gray70", '#8da0cb','#e78ac3', '#66c2a5'))+
+  theme_bw()
+
+by.treatment.gg <- ggplot(sem_summ, aes(treatment, fill = label))+
+  geom_bar()+
+  scale_x_discrete("")+scale_y_continuous("Counts")+
+  scale_fill_manual("", values = c('#fc8d62', "gray70", '#8da0cb','#e78ac3', '#66c2a5'))+
+  theme_bw()+theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+
+# both plots side by side
+by.site.gg + by.treatment.gg + plot_layout(guides = "collect", widths = c(8,3))
+```
+
+
+## Conclusions   
+
+Here I made basic SEMs from some of the 2022 field sites/seasons/rotations where we saw interesting results (generally these were highest numbers of treatment-yield ASVs, which were associated with organic amendments). 
+
+I can show that soil treatments affect yields by mediating microbiome members: across sites, rotations/seasons, bacteria or eukaryotes, and individual ASVs or consortia. Plausible models could be made even when treatments didn’t statistically affect yields.  
+
+Organic amendments increase abundances of more yield-associated ASVs than fumigation or brassica treatments, although this trend is very idiosyncratic and varies by site, rotation, and season.  
+
+Soil chemistry (OM%, pH) can sometimes provide explanation for how yield-associated taxa respond to treatments.
+
+Higher n in field sites/rotations of interest would allow us to better model causal relationships to better understand mechanisms of how microbiome members respond to soil treatments and affect yields.   
+
+Later, exhaustive efforts to model how treatments influenced ASVs that influenced yields showed a few interesting patterns. Where we observed treatments influencing ASVs that influenced yields (in western and eastern sites), amendment-associated ASVs increased yields while fumigation-associated ASVs decreased them in both Minnesota sites.   
+
+#### session info
+```{r}
+sessionInfo()
+```

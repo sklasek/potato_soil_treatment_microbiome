@@ -1,0 +1,538 @@
+---
+title: "model_results"
+author: "Scott Klasek"
+date: "`r Sys.Date()`"
+output: github_document
+---
+## Purpose
+Summarize model information here because the document 45_SEM_stuff is too big and scary.  
+
+## Setup
+#### load libraries
+```{r}
+packages <- c("tidyverse", "phyloseq", "speedyseq", "patchwork", "compositions", "piecewiseSEM", "lme4")
+invisible(lapply(packages, require, character.only = TRUE))
+```
+
+#### load data
+```{r}
+# lists of phyloseq objects
+# these include metadata updated in doc 39.Rmd
+# they are ALL years, ASVs and samples NOT subsetted or transformed
+its.ps.list <- readRDS(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/its.ps.list")
+its.ps.list <- its.ps.list[c(1:7,9)] # remove Larkin samples
+bact.ps.list <- readRDS(file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/bact.ps.list")
+bact.ps.list <- bact.ps.list[c(1:7,9)] # remove Larkin samples
+
+# jim's spreadsheet of soil chemical metadata
+jim.info <- read.csv(file="/Users/klas0061/Desktop/UMN/jim_info/PSHP_ALL_obj_1_all_data_2024_02_29.csv") # import
+```
+
+#### reformat soil chemical metadata so it can be added to phyloseq objects using merge_with_jim_data       
+```{r}
+# basic clean-up stuff
+colnames(jim.info) <- jim.info[1,] # fix column names (there are two header cols)
+jim.info <- jim.info[2:nrow(jim.info),] # omit redundant column name 
+
+for (i in c(2:3,5:6)){jim.info[,i] <- as.numeric(jim.info[,i])} # convert columns that should be numeric into numeric
+
+# remove extraneous year columns that correspond to yield data only
+jim.info <- jim.info[,c(1:101,103:129,131:ncol(jim.info))]
+
+# select data columns to merge by, and to add (an example, can always select more later)
+jim.info.s <- jim.info %>% dplyr::select(State, Objective, Rotation, Plot, Year, Month, 
+                                  pH, `Nitrate-N (ppm)`, `NH4-N (ppm)`, `P-Olsen (ppm)`, `P-Bray (ppm)`,
+                                  `OM (%)`, `Solvita (ppm)`, `Total C (%)`, `Total organic C (%)`, `POX-C (ppm)`) 
+
+for (i in 7:16){jim.info.s[,i] <- as.numeric(jim.info.s[,i])} # again, convert columns that should be numeric into numeric
+
+# change OR Spring 2020 month to 4 so Cultivar (whether field is in potato or not) is not NA
+jim.info.s[which(jim.info.s$State=="OR" & jim.info.s$Year==20 & jim.info.s$Month=="3"),"Month"] <- "4" 
+
+jim.info.s$Month <- as.numeric(jim.info.s$Month) # more character to numeric
+```
+
+#### define functions
+```{r}
+# drop_ghost_asvs drops ASVs that are not present in any samples- but are still kept because you've 
+# subsetted samples within a larger phyloseq object. This returns the phyloseq object with the subsetted count table.
+drop_ghost_asvs <- function(ps){
+  
+  # extract the count table from the phyloseq, with ASVs as columns
+    if(taxa_are_rows(ps)){counts <- t(ps@otu_table)} else{ # write count table with ASVs as rows
+    counts <- ps@otu_table
+    }
+  # remove empty rows corresponding to ASVs that are present in 0 samples
+  counts <- counts[,colSums(counts)>0]
+  
+  # write the count table back in
+  otu_table(ps) <- counts # drops all zero-count ASVs from the tax table and refseq as well, in contrast to 'ps@otu_table <- counts'
+  return(ps)
+}
+
+# subset_occupancy drops ASVs detected in less than a certain proportion of the samples
+# all it takes is a phyloseq object. it drops the ASVs below the occupancy cutoff, and moves their counts to 
+# a "summing" column. Tax table now has a summing column as well. Output is a phyloseq object. 
+subset_occupancy <- function(ps, occ_cutoff){
+  
+  # first, calculate occupancy of each ASV (proportion of samples detected in, from 0 to 1)
+  occ <- vector("numeric")
+    for (i in 1:ncol(ps@otu_table)) {
+      occ[i] <- sum(ps@otu_table[,i] != 0)/nrow(ps@otu_table[,i])
+    }
+  # write ASV names
+  names(occ) <- colnames(ps@otu_table)
+    
+  # select ASVs to keep based on occupancy 
+  keep.asvs <- occ[which(occ >= (occ_cutoff))] # keep only the ASVs above the cutoff
+  
+  # print some useful information
+  cat((length(keep.asvs)), "features are kept. \n")
+  
+  # subset the count table to maintain compositionality
+  keep.table <- ps@otu_table[,names(keep.asvs)] # the kept ASVs, which does not include a summing column
+  drop.table <- ps@otu_table[,setdiff(colnames(ps@otu_table), names(keep.asvs))] # the dropped ASVs
+  summing <- rowSums(drop.table) # add up counts for dropped features to make a summing column
+  keep.new <- cbind(keep.table, summing) # add new summing to the keep table
+  
+  # make a subsetted tax_table
+  taxa <- tax_table(ps)[names(keep.asvs),] # with only the kept ASVs over the occupancy cutoff
+  summing <- c("Summing", rep(NA, times = ncol(taxa)-1))
+  taxa2 <- rbind(taxa, summing)
+    
+  # put the new count table and tax table into a new ps object
+  # we must say goodbye to our refseq here because "summing" doesn't have a sequence associated with it.
+  new.ps <- phyloseq(sample_data(ps),
+                     otu_table(keep.new, taxa_are_rows = FALSE),
+                     tax_table(taxa2))
+  return(new.ps)
+}
+
+# transform_clr takes a phyloseq object and transforms the count table using a centered-log-ratio
+# it spits out a phyloseq object with transformed counts.
+transform_clr <- function(ps){
+  counts.clr <- as.matrix(clr(ps@otu_table))
+  ps.new <- phyloseq(otu_table(counts.clr, taxa_are_rows = FALSE),
+                     tax_table(ps),
+                     sample_data(ps))
+  cat("Counts transformed with CLR. \n")
+  return(ps.new)
+}
+
+# merge_with_jim_data takes as input a phyloseq object and a dataframe of objective 1 data that Jim has curated, which can be subsetted 
+# it writes data from Jim's spreadsheet into the corresponding phyloseq object, based on combinations
+# make sure jim's data is cleaned up according to the steps above!
+merge_with_jim_data <- function(ps, jim.info.subset){
+  df <- left_join(data.frame(ps@sam_data), jim.info.subset, 
+                by = c("state" = "State", "objective" = "Objective", "rotation" = "Rotation",
+                       "plot" = "Plot", "year" = "Year", "month" = "Month")) # merges 
+  #the unique combo of columns from phyloseq sample data and jim's data
+  rownames(df) <- rownames(ps@sam_data) # ok as long as the rows are in the same order, which they are
+  
+  # put df into the sample_data.
+  sample_data(ps) <- df # this also automatically drops the ghost ASVs and refsequences from the ps object
+  return(ps)
+}
+```
+
+
+## Microbiome-informed models   
+
+### Scenario 1: OR 2-yr bacterial consortia in response to amendment    
+From the 2-yr rotation only  
+
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps6 <- bact.ps.list[["OR.16S.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 2 & !is.na(Total.yield) & general_category != "Fumigated") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples 
+sub.df <- jim.info.s %>% filter(State == "OR" & Year == 22)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps6 <- merge_with_jim_data(ps6, sub.df)
+
+# define ASVs to model
+or.amd.bact.summer.asvs <- c("ASV1254","ASV21630", "ASV2399",
+                          "ASV3632",  "ASV4948", "ASV5076",  "ASV7919", "ASV792")
+
+# keep only the summer samples
+ps6 <- ps6 %>% subset_samples(season == "Summer") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the 2 yr rotation SUMMER associated ASVs to the sample data 
+df1 <- cbind(data.frame(ps6@sam_data), ps6@otu_table[,or.amd.bact.summer.asvs])
+
+# make a consortium column of the sum of the ASVs
+df1$consortium <- rowSums(df1[,startsWith(colnames(df1), "ASV")])
+
+### tidying up the dataframe 
+# remove NA cols
+df1 <- df1 %>% dplyr::select(-cover_2020, -green_cov_pct_pre_kill, -Total.C...., -Total.organic.C....)
+
+# there was one outlier OM value at 2.8, next highest OM recorded in Oregon any time was 1.8
+# also keep only Norkotah cultivar
+df1.no <- df1 %>% filter(`OM....` < 2 & cultivar == "Norkotah")
+
+# lm where amendment directly impacts yield as well (this cannot be modeled in SEM)
+lm4 <- lm(Total.yield ~ Amended + consortium, df1.no)
+summary(lm4)
+extractAIC(lm4) # gives AIC of 87, which is lower than the PSEM
+
+# calculate 
+est_amd <- summary(lm(consortium ~ Amended, df1.no))$coefficients[2, 1]
+est_cons <- summary(lm(Total.yield ~ consortium, df1.no))$coefficients[2, 1]
+
+# Yield increase as an effect of treatment on microbiome (cwt/ac) is the product of the individual coefficients 
+yield_inc <- est_amd * est_cons
+
+# percent increase in total yield from treatment-related microbiome changes, relative to control  
+pct_yield_inc <- est_amd * est_cons / mean(df1.no %>% filter(general_category == "Control") %>% pull(Total.yield)) * 100
+
+# best model
+summary(lm(Total.yield ~ consortium + Amended, df1.no))
+
+# extract p- and R2 values
+overall_p <- function(my_model) {
+    f <- summary(my_model)$fstatistic
+    p <- pf(f[1],f[2],f[3],lower.tail=F)
+    attributes(p) <- NULL
+    return(p)
+}
+
+pval <- overall_p(lm(Total.yield ~ consortium + Amended, df1.no))
+rsq <- summary(lm(Total.yield ~ consortium + Amended, df1.no))[[8]]
+```
+
+### Scenario 2: ID 3-yr bacterial consortia in response to amendment    
+From the 3-yr rotation only 
+
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps7 <- bact.ps.list[["ID.16S.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & Fumigated == FALSE) 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples 
+sub.df <- jim.info.s %>% filter(State == "ID" & Year == 22 & Rotation == 3)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps7 <- merge_with_jim_data(ps7, sub.df)
+
+# define ASVs
+id.amd.bact.summer.asvs <- c("ASV3781", "ASV12474", "ASV17047", "ASV2340",  "ASV2345",  
+                             "ASV2589", "ASV4416",  "ASV4825",  "ASV4830")
+
+# keep only the summer samples, remove any below 50% occupancy, and transform abundances
+ps7 <- ps7 %>% subset_samples(season == "Summer") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the summer associated ASVs to the sample data 
+df2 <- cbind(data.frame(ps7@sam_data), ps7@otu_table[,id.amd.bact.summer.asvs])
+
+# make a consortium column of the sum of the ASVs
+df2$consortium <- rowSums(df2[,startsWith(colnames(df2), "ASV")])
+
+# remember that Green Manure treatments are now classified as controls
+df2[which(df2$amendment == "Green Manure"),"general_category"] <- "Control"
+
+# control for cultivar: keep only Norkotahs
+df2 <- df2 %>% filter(cultivar == "Norkotah")
+
+# drop NA cols
+df2 <- df2[, colSums(is.na(df2)) != nrow(df2)]
+
+# convert amended treatment to 0/1 (NECESSARY FOR EXTRACTING MODEL INFO FROM PSEMs)
+df2$Amended <- as.integer(as.logical(df2$Amended))
+
+# SEM 2: amendment increases OM, OM and amendment increase consortium, and consortium increases total yields
+psem2 <- psem(lm(`OM....` ~ Amended, df2),
+               lm(consortium ~ `OM....` + Amended, df2),
+               lm(Total.yield ~ consortium, df2))  
+
+fisherC(psem2) # valid
+coefs(psem2)
+
+# extract p and R2 values 
+psemrsq <- rsquared(psem2)[which(rsquared(psem2)$Response == "Total.yield"),"R.squared"]
+rsq <- append(rsq, psemrsq)
+pval <- append(pval, fisherC(psem2, conserve = T)[1,3])
+
+# calculate 
+est_amd <- summary(lm(consortium ~ Amended, df2))$coefficients[2, 1]
+est_cons <- summary(lm(Total.yield ~ consortium, df2))$coefficients[2, 1]
+
+# Yield increase as an effect of treatment on microbiome (cwt/ac) is the product of the individual coefficients 
+yield_inc <- append(yield_inc, (est_amd * est_cons))
+
+# percent increase in total yield from treatment-related microbiome changes, relative to control  
+pct <- est_amd * est_cons / mean(df2 %>% filter(general_category == "Control") %>% pull(Total.yield)) * 100
+pct_yield_inc <- append(pct_yield_inc, pct)
+```
+
+### Scenario 3: ME 2-yr ITS in response to amendment    
+The 3-yr rotation is the one that had the yield increase, but the 2-yr one had the two amendment-influenced, yield-positive fungal ASVs.  
+
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps8 <- its.ps.list[["ME.ITS.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 2 & !is.na(Total.yield) & general_category != "Fumigated") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples
+sub.df <- jim.info.s %>% filter(State == "ME" & Year == 22 & Rotation == 2)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps8 <- merge_with_jim_data(ps8, sub.df)
+
+# define ASVs
+me.amd.its.spring.asvs <- c("ASV501", "ASV1906")
+
+# keep only the spring samples, drop, and transform
+ps8 <- ps8 %>% subset_samples(season == "Spring") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the spring associated ASVs to the sample data 
+df3 <- cbind(data.frame(ps8@sam_data), ps8@otu_table[,me.amd.its.spring.asvs])
+
+# make a consortium column of the sum of the ASVs
+df3$consortium <- rowSums(df3[,startsWith(colnames(df3), "ASV")])
+
+# since we have two cultivars of nearly equal abundance, control for cultivar as a factor
+df3$cultivar <- ifelse(df3$cultivar == "Burbank", 0, 
+                       ifelse(df3$cultivar == "Caribou", 1, NA))
+
+# model
+summary(lm(Total.yield ~ Amended + consortium + cultivar, df3))
+
+pval <- append(pval, overall_p(lm(Total.yield ~ Amended + consortium + cultivar, df3)))
+rsq <- append(rsq, summary(lm(Total.yield ~ Amended + consortium + cultivar, df3))[[8]])
+
+# calculate coefficients
+# cultivar left out of consortium -> yield model because insignificant
+est_amd <- summary(lm(consortium ~ Amended + cultivar, df3))$coefficients[2, 1]
+est_cons <- summary(lm(Total.yield ~ consortium, df3))$coefficients[2, 1]
+
+# Yield increase as an effect of treatment on microbiome (cwt/ac) is the product of the individual coefficients 
+yield_inc <- append(yield_inc, (est_amd * est_cons))
+
+# percent increase in total yield from treatment-related microbiome changes, relative to control  
+pct <- est_amd * est_cons / mean(df3 %>% filter(general_category == "Control") %>% pull(Total.yield)) * 100
+pct_yield_inc <- append(pct_yield_inc, pct)
+```
+
+
+### Scenario 4: MI 3-yr ITS in response to amendment   
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps9 <- its.ps.list[["MI.ITS.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & general_category != "Control") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples
+sub.df <- jim.info.s %>% filter(State == "MI" & Year == 22 & Rotation == 3)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps9 <- merge_with_jim_data(ps9, sub.df)
+
+# define ASVs to model
+mi.amd.its.summer.asvs <- c("ASV1099", "ASV1194")
+
+# keep only the spring samples, drop, and transform
+ps9 <- ps9 %>% subset_samples(season == "Summer") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the spring associated ASVs to the sample data 
+df4 <- cbind(data.frame(ps9@sam_data), ps9@otu_table[,mi.amd.its.summer.asvs])
+
+# make a consortium column of the sum of the ASVs
+df4$consortium <- rowSums(df4[,startsWith(colnames(df4), "ASV")])
+
+# convert amended treatment to 0/1
+df4$Amended <- as.integer(as.logical(df4$Amended))
+
+### tidying up the dataframe 
+# remove NA cols
+df4 <- df4 %>% dplyr::select(-cover_2019, -cover_2020, -green_cov_pct_pre_kill, -Total.C...., 
+                             -Total.organic.C...., -VPPG, -Root.Lesion.100.cc, -rotation_comparison)
+
+# encode cultivar as a dummy variable
+df4$cultivar <- ifelse(df4$cultivar == "Superior", 0,
+                       ifelse(df4$cultivar == "Burbank", 1, 2))
+
+# SEM: amendment directly stimulates consortium, which increases yields
+psem1 <- psem(lm(consortium ~ Amended + cultivar, df4),
+              lm(Total.yield ~ consortium + cultivar, df4)) 
+
+fisherC(psem1) # valid
+coefs(psem1)
+
+# extract p and R2 values
+psemrsq <- rsquared(psem1)[which(rsquared(psem1)$Response == "Total.yield"),"R.squared"]
+rsq <- append(rsq, psemrsq)
+pval <- append(pval, fisherC(psem1, conserve = T)[1,3])
+
+# calculate coefficients
+# cultivar left out of consortium -> yield model because insignificant
+est_amd <- summary(lm(consortium ~ Amended + cultivar, df4))$coefficients[2, 1]
+est_cons <- summary(lm(Total.yield ~ consortium, df4))$coefficients[2, 1]
+
+# percent increase in total yield from treatment-related microbiome changes, relative to control  
+pct <- est_amd * est_cons / mean(df4 %>% filter(general_category == "Fumigated") %>% pull(Total.yield)) * 100
+
+# Yield increase as an effect of treatment on microbiome (cwt/ac) is the product of the individual coefficients 
+yield_inc <- append(yield_inc, (est_amd * est_cons))
+
+# percent increase in total yield from treatment-related microbiome changes, relative to control  
+pct_yield_inc <- append(pct_yield_inc, pct)
+```
+
+### Scenario 5: OR 3-yr ITS in response to fumigation   
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps1 <- its.ps.list[["OR.ITS.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & general_category != "Amended") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples 
+sub.df <- jim.info.s %>% filter(State == "OR" & Year == 22)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps1 <- merge_with_jim_data(ps1, sub.df)
+
+# keep only the spring samples, drop, and transform
+ps1 <- ps1 %>% subset_samples(season == "Summer") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# only one eukaryotic ASV associated with fumigation/yield, and it is 60 DAP
+df5 <- cbind(data.frame(ps1@sam_data), ps1@otu_table[,"ASV2495"])
+
+# encode cultivar as a dummy variable
+df5$cultivar <- ifelse(df5$cultivar == "Burbank", 0,
+                       ifelse(df5$cultivar == "Norkotah", 1, 2))
+
+# Total.yield ~ 60 DAP abundance of ASV2495 + Fumigated + cultivar. Cultivars coded as dummy variables.
+summary(lm(Total.yield ~ ASV2495 + Fumigated + cultivar, df5))
+
+pval <- append(pval, overall_p(lm(Total.yield ~ ASV2495 + Fumigated + cultivar, df5)))
+rsq <- append(rsq, summary(lm(Total.yield ~ ASV2495 + Fumigated + cultivar, df5))[[8]])
+
+# calculate coefficients
+# cultivar left out of consortium -> yield model because insignificant
+est_amd <- summary(lm(ASV2495 ~ Amended + cultivar, df5))$coefficients[2, 1]
+est_cons <- summary(lm(Total.yield ~ ASV2495, df5))$coefficients[2, 1]
+
+# Yield increase as an effect of treatment on microbiome (cwt/ac) is the product of the individual coefficients 
+yield_inc <- append(yield_inc, (est_amd * est_cons))
+
+# percent increase in total yield from treatment-related microbiome changes, relative to control  
+pct <- est_amd * est_cons / mean(df5 %>% filter(general_category == "Control") %>% pull(Total.yield)) * 100
+pct_yield_inc <- append(pct_yield_inc, pct)
+```
+
+### Scenario 6: OR  3-yr bacteria in response to mustard incorporation  
+```{r}
+# begin by subsetting the phyloseq object by site, rotation, and year
+ps <- bact.ps.list[["OR.16S.ps"]] %>% 
+  subset_samples(year == 22 & rotation == 3 & !is.na(Total.yield) & general_category != "Fumigated") 
+
+# subset soil chemical data, and transfer spring measurements of OM % to their corresponding summer samples
+sub.df <- jim.info.s %>% filter(State == "OR" & Year == 22 & Rotation == 3)
+sub.df <- sub.df %>% group_by(Plot) %>% fill(`OM (%)`)
+
+# import this soil data into the phyloseq object
+ps <- merge_with_jim_data(ps, sub.df)
+
+# they're both in spring
+or.must.bact.spring.asvs <- c("ASV270", "ASV2762", "ASV3009", "ASV3745", "ASV574")
+
+# keep only the spring samples, drop, and transform
+ps <- ps %>% subset_samples(season == "Spring") %>% 
+  drop_ghost_asvs() %>%
+  subset_occupancy(0.5) %>% 
+  transform_clr() 
+
+# add in the abundance of the spring associated ASVs to the sample data 
+df6 <- cbind(data.frame(ps@sam_data), ps@otu_table[,or.must.bact.spring.asvs])
+
+# make a consortium column of the sum of the ASVs
+df6$consortium <- rowSums(df6[,startsWith(colnames(df6), "ASV")])
+
+# drop non Norkotah cultivars
+df6.no <- df6 %>% filter(cultivar == "Norkotah")
+
+# drop NA cols
+df6.no <- df6.no[, colSums(is.na(df6.no)) != nrow(df6.no)]
+
+# convert Brassica to integer
+df6.no$Brassica <- as.integer(as.logical(df6.no$Brassica))
+
+# SEM: mustard increases nitrate, decreases pH, and increases cumulative target ASV abundances at planting, 
+# abundances decrease yields. Best SEM included pH, but not nitrate. Omitted non-Norkotah cultivars.
+psem3 <- psem(lm(pH ~ Brassica, df6.no),
+              lm(consortium ~ Brassica, df6.no),
+              lm(Total.yield ~ consortium + pH, df6.no))
+
+fisherC(psem3) # valid
+coefs(psem3)
+
+# extract p and R2 values
+psemrsq <- rsquared(psem3)[which(rsquared(psem3)$Response == "Total.yield"),"R.squared"]
+rsq <- append(rsq, psemrsq)
+pval <- append(pval, fisherC(psem3, conserve = T)[1,3])
+
+# calculate coefficients
+# cultivar left out of consortium -> yield model because insignificant
+est_amd <- summary(lm(consortium ~ Brassica + pH, df6.no))$coefficients[2, 1]
+est_cons <- summary(lm(Total.yield ~ consortium, df6.no))$coefficients[2, 1]
+
+# Yield increase as an effect of treatment on microbiome (cwt/ac) is the product of the individual coefficients 
+yield_inc <- append(yield_inc, (est_amd * est_cons))
+
+# percent increase in total yield from treatment-related microbiome changes, relative to control  
+pct <- est_amd * est_cons / mean(df6.no %>% filter(general_category == "Control") %>% pull(Total.yield)) * 100
+pct_yield_inc <- append(pct_yield_inc, pct)
+```
+
+
+## Summary table /figure
+```{r}
+# add site, soil treatment, rotation length, and model type 
+site <- c("OR", "ID", "ME1", "MI", "OR", "OR")
+treatment <- c(rep("Amendment", times = 4), "Fumigation", "Mustard")
+rotation <- c("2-yr", "3-yr", "2-yr", "3-yr", "3-yr", "3-yr")
+modeltype <- c("lm", "SEM", "lm", "SEM", "lm", "SEM")
+
+# bind these together with the model output data
+model.table <- data.frame(cbind(site, treatment, rotation, modeltype, 
+                                "p_value" = round(pval, 3), "mult_R2" = round(rsq, 2), 
+                                "yield_inc" = round(yield_inc, 1), "pct_yield_inc" = round(pct_yield_inc, 1)))
+# coerce back to numeric
+for (i in 5:8){
+  model.table[,i] <- as.numeric(model.table[,i])
+}
+
+# and here we are
+model.table
+
+write_tsv(model.table, file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/figures_and_tables/supplemental_tables/microbiome_model_info_table.tsv")
+```
+
+
+## Conclusions
+
+#### session info
+```{r}
+sessionInfo()
+```

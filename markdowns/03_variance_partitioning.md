@@ -1,0 +1,1258 @@
+adventures in variance partitioning
+================
+Scott Klasek
+2024-06-10
+
+## Purpose
+
+Investigate the proportions of variance in bacterial and eukaryotic
+communities that are attributed to different factors, including
+treatments. Examine whether there are patterns in treatment-affected
+taxa across different field sites.
+
+Redoing in June because there were some green manure treatments in ME
+and ID that should be re-classified as controls- in contrast to
+compost/manure amendments.
+
+## Setup
+
+#### load libraries
+
+``` r
+packages <- c("tidyverse", "phyloseq", "speedyseq", "patchwork", "NatParksPalettes", "variancePartition", "compositions")
+invisible(lapply(packages, require, character.only = TRUE))
+```
+
+    ## Loading required package: tidyverse
+
+    ## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+    ## ✔ dplyr     1.1.4     ✔ readr     2.1.5
+    ## ✔ forcats   1.0.0     ✔ stringr   1.5.1
+    ## ✔ ggplot2   3.5.0     ✔ tibble    3.2.1
+    ## ✔ lubridate 1.9.3     ✔ tidyr     1.3.0
+    ## ✔ purrr     1.0.2     
+    ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+    ## ✖ dplyr::filter() masks stats::filter()
+    ## ✖ dplyr::lag()    masks stats::lag()
+    ## ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+    ## Loading required package: phyloseq
+    ## 
+    ## Loading required package: speedyseq
+    ## 
+    ## 
+    ## Attaching package: 'speedyseq'
+    ## 
+    ## 
+    ## The following objects are masked from 'package:phyloseq':
+    ## 
+    ##     filter_taxa, plot_bar, plot_heatmap, plot_tree, psmelt, tax_glom,
+    ##     tip_glom, transform_sample_counts
+    ## 
+    ## 
+    ## Loading required package: patchwork
+    ## 
+    ## Loading required package: NatParksPalettes
+    ## 
+    ## Loading required package: variancePartition
+    ## 
+    ## Loading required package: limma
+    ## 
+    ## Loading required package: BiocParallel
+    ## 
+    ## 
+    ## Attaching package: 'variancePartition'
+    ## 
+    ## 
+    ## The following object is masked from 'package:limma':
+    ## 
+    ##     topTable
+    ## 
+    ## 
+    ## Loading required package: compositions
+    ## 
+    ## Welcome to compositions, a package for compositional data analysis.
+    ## Find an intro with "? compositions"
+    ## 
+    ## 
+    ## 
+    ## Attaching package: 'compositions'
+    ## 
+    ## 
+    ## The following objects are masked from 'package:stats':
+    ## 
+    ##     anova, cor, cov, dist, var
+    ## 
+    ## 
+    ## The following object is masked from 'package:graphics':
+    ## 
+    ##     segments
+    ## 
+    ## 
+    ## The following objects are masked from 'package:base':
+    ## 
+    ##     %*%, norm, scale, scale.default
+
+#### define functions
+
+``` r
+# import phyloseqs from a specified directory that contain character substrings in the filename and combine them into a list
+# it assumes all phyloseq files have a .ps extension
+# print.stats is TRUE or FALSE, TRUE (default) prints stats of each phyloseq object in the list
+# this will import files that contain the chr_string, even if they do not begin with said chr_string. 
+# making it an improvement over the previous version of this function! 
+import_phyloseqs <- function(directory, chr_string, print.stats=TRUE){
+  
+  # set the wd to the directory specified
+  setwd(directory) 
+  
+  # get a character vector of the files to import
+  its.files <- list.files(pattern="*.ps")[str_detect(list.files(pattern="*.ps"), chr_string)] 
+  
+  # import the phyloseq files as a list
+  its.ps.list <- lapply(its.files, readRDS) 
+  
+  # name the elements of the list according to their filenames
+  names(its.ps.list) <- its.files 
+  
+  # print stats of each phyloseq object if print.stats = TRUE
+  if(print.stats){print(its.ps.list)}
+
+  # return list
+  return(its.ps.list)
+}
+
+# merge_with_jim_data takes as input a phyloseq object and a dataframe of objective 1 data that Jim has curated, which can be subsetted
+# it writes data from Jim's spreadsheet into the corresponding phyloseq object, based on combinations
+# make sure jim's data is cleaned up according to the steps above!
+merge_with_jim_data <- function(ps){
+  df <- left_join(data.frame(ps@sam_data), jim.info.s, 
+                by = c("state" = "State", "objective" = "Objective", "rotation" = "Rotation",
+                       "plot" = "Plot", "year" = "Year", "month" = "Month")) # merges 
+  #the unique combo of columns from phyloseq sample data and jim's data
+  rownames(df) <- rownames(ps@sam_data) # ok as long as the rows are in the same order, which they are
+  
+  # put df into the sample_data.
+  sample_data(ps) <- df # this also automatically drops the ghost ASVs and refsequences from the ps object
+  return(ps)
+}
+
+# drop_ghost_asvs drops ASVs that are not present in any samples- but are still kept 
+# because you've subsetted samples within a larger phyloseq object. This returns the phyloseq object with the subsetted count table.
+drop_ghost_asvs <- function(ps){
+  
+  # extract the count table from the phyloseq, with ASVs as columns
+    if(taxa_are_rows(ps)){counts <- t(ps@otu_table)} else{ # write count table with ASVs as rows
+    counts <- ps@otu_table
+    }
+  # remove empty rows corresponding to ASVs that are present in 0 samples
+  counts <- counts[,colSums(counts)>0]
+  
+  # write the count table back in
+  otu_table(ps) <- counts # this way drops all zero-count ASVs from the tax table and refseq as well, in contrast to 'ps@otu_table <- counts'
+  return(ps)
+}
+
+# subset_occupancy drops ASVs below a certain occupancy: 8.33%
+# why this number? modeling ASV abundances seems useless if ASVs are in fewer than 50% of the samples,
+# and considering that some treatment categories are used once across six treatment x rotations,
+# 1/6 x 0.5 = 8.33%
+# all it takes is a phyloseq object. it drops the ASVs below 8.33% occupancy, and moves their counts to 
+# a "summing" column. Tax table now has a summing column as well. Output is a phyloseq object. 
+subset_occupancy <- function(ps){
+  
+# first, calculate occupancy of each ASV (proportion of samples detected in, from 0 to 1)
+occ <- vector("numeric")
+  for (i in 1:ncol(ps@otu_table)) {
+    occ[i] <- sum(ps@otu_table[,i] != 0)/nrow(ps@otu_table[,i])
+  }
+# write ASV names
+names(occ) <- colnames(ps@otu_table)
+  
+# select ASVs to keep based on occupancy 
+keep.asvs <- occ[which(occ >= (1/12))] # occupancy must be over 8.33%
+
+# print some useful information
+cat((length(keep.asvs)), "features are kept. \n")
+
+# subset the count table to maintain compositionality
+keep.table <- ps@otu_table[,names(keep.asvs)] # the kept ASVs, which does not include a summing column
+drop.table <- ps@otu_table[,setdiff(colnames(ps@otu_table), names(keep.asvs))] # the dropped ASVs
+summing <- rowSums(drop.table) # add up counts for dropped features to make a summing column
+keep.new <- cbind(keep.table, summing) # add new summing to the keep table
+
+# make a subsetted tax_table
+taxa <- tax_table(ps)[names(keep.asvs),] # with only the kept ASVs over the occupancy cutoff
+summing <- c("Fungi", rep(NA, times = ncol(taxa)-1))
+taxa2 <- rbind(taxa, summing)
+  
+# put the new count table and tax table into a new ps object
+# we must say goodbye to our refseq here because "summing" doesn't have a sequence associated with it.
+new.ps <- phyloseq(sample_data(ps),
+                   otu_table(keep.new, taxa_are_rows = FALSE),
+                   tax_table(taxa2))
+return(new.ps)
+}
+
+# transform_clr takes a phyloseq object and transforms the count table using a centered-log-ratio
+# it spits out a phyloseq object with transformed counts.
+transform_clr <- function(ps){
+  counts.clr <- as.matrix(clr(ps@otu_table))
+  ps.new <- phyloseq(otu_table(counts.clr, taxa_are_rows = FALSE),
+                     tax_table(ps),
+                     sample_data(ps))
+  cat("Counts transformed with CLR. \n")
+  return(ps.new)
+}
+
+# variance_partition runs variancePartition::fitExtractVarPartModel 
+# inputs are a phyloseq and a formula specifying columns in sam_data
+variance_partition <- function(ps, formula){
+  
+  # make a matrix of the counts
+  matrix <- as.matrix(t(ps@otu_table))
+
+  # make a dataframe from the sample data
+  samdata <- data.frame(ps@sam_data)
+  
+  # run varPart
+  vp <- fitExtractVarPartModel(matrix, formula, samdata) 
+
+  return(vp)
+}
+
+# calculate the weighted variance of all factors from ASVs weighted by relative abundance
+# takes a phyloseq object (an original one used as input in during the filtering/transforming steps)
+# and a variancePartition object made FROM the subsequent ps object
+# it returns a numeric vector with names = colnames of the variance partition object, showing the % variance explained by each factor
+get_normalized_variance <- function(ps.orig, var){
+  
+  # do pretty much the same workflow, subsetting and transforming 
+  ps <- ps.orig %>% 
+    subset_samples(year == 22) %>% 
+    drop_ghost_asvs() %>%
+    subset_occupancy() %>%
+    transform_sample_counts(function(x) x / sum(x)) # but don't transform with CLR, use relabund
+    
+  # calculate mean relabund
+  mean_rel_abund <- colSums(ps@otu_table) / nrow(ps@otu_table) 
+  
+  # get a numeric vector of the sum of variance
+  var <- colSums(var * mean_rel_abund)*100
+  return(var)
+}
+
+# plot_biomarkers plots a vector of ASVs or taxa and allows you to facet by category
+# takes a phyloseq object (an original one used as input in during the filtering/transforming steps)
+# as well as a character vector of ASVs/taxa to plot and a taxonomic level to plot them at
+plot_biomarkers <- function(ps.orig, biomarkerlist, taxlevel){
+  
+  # subset original phyloseq object, and transform to PERCENT abundance
+  ps <- ps.orig %>% 
+    subset_samples(year == 22) %>% 
+    drop_ghost_asvs() %>%
+    subset_occupancy() %>%
+    transform_sample_counts(function(x) x / sum(x) * 100) 
+  
+  # calculate mean percent abundances for all biomarker ASVs
+  num <- vector("numeric") # define a numeric vector
+  for (i in biomarkerlist) {num[i] <- mean(otu_table(ps)[,i])} 
+  
+  # obtain the row numbers corresponding to biomarker ASVs
+  asvs.to.subset <- vector("integer") # define an integer vector
+  for (i in names(num)) {asvs.to.subset[i] <- which(rownames(tax_table(ps))==i)} 
+  
+  # subset the taxonomy and ASV table and make a new phyloseq
+  bmtt <- tax_table(ps)[asvs.to.subset,] 
+  bmasvt <- otu_table(ps)[,names(num)] 
+  ps.bm <- phyloseq(tax_table(bmtt), 
+                 sample_data(ps),
+                 otu_table(bmasvt, taxa_are_rows = FALSE)) 
+  
+  # plot bar graphs % abundances across all samples
+  bm.barplot <- plot_bar(ps.bm, fill=taxlevel)+
+    geom_bar(stat="identity", position="stack")+
+    scale_y_continuous("% Abundance")+
+    theme(axis.text.x = element_blank()) 
+  
+  # returns the plot
+  return(bm.barplot) 
+}
+
+# add_taxa takes a dataframe containing a column "ASV" with ASV numbers
+# it adds taxonomy to the ASVs and also returns a closest_tax column showing the most specific taxonomy for each ASV
+add_taxa <- function(df){
+  
+  # get tax_table from all ITS data
+  df2 <- data.frame(its.all@tax_table)
+  
+  # add ASV numbers to it
+  df2$ASV <- rownames(df2)
+  
+  # left-join it by ASV with the input dataframe
+  df3 <- left_join(df, df2, by = "ASV")
+  
+  # add the closest taxonomic level specified as a new column
+  df3$closest_tax <- ifelse(!is.na(df3$Species), paste(df3$Genus, df3$Species), 
+                      ifelse(!is.na(df3$Genus), paste(df3$Genus, "sp."),     
+                      ifelse(!is.na(df3$Family), paste("Fam.", df3$Family),
+                      ifelse(!is.na(df3$Order), paste("Ord.", df3$Order),
+                      ifelse(!is.na(df3$Class), paste("Cl.", df3$Class),
+                      ifelse(!is.na(df3$Phylum), paste("Phy.", df3$Phylum),
+                      NA))))))
+  return(df3)
+}
+```
+
+#### load data
+
+``` r
+# import phyloseq objects as lists
+# ITS
+its.list <- import_phyloseqs("/Users/klas0061/Desktop/UMN/phyloseqs/all_obj1_by_site", "ITS", print.stats = F)
+its.all <- its.list[[1]]
+its.list <- its.list[2:10] # drop all.ITS.ps
+
+# 16S
+bact.list <- import_phyloseqs("/Users/klas0061/Desktop/UMN/phyloseqs/all_obj1_by_site", "16S.ps", print.stats = F)
+bact.all <- bact.list[[1]]
+bact.list <- bact.list[2:10] # drop all.bact.ps
+
+# updated metadata
+jim.info.s <- read.csv(file = "/Users/klas0061/Desktop/UMN/jim_info/yields/2024_02_29_yield.and.vert.data.csv")
+```
+
+#### metadata processing
+
+``` r
+### ITS
+### site-specific sample data curation
+# MN: I had written the 60 DAP month of 2022 as 6 June, where Jim had it as 5 May. 
+# This prevented some samples from merging with Jim's data. Correcting it here:
+its.list[["MN.ITS.ps"]]@sam_data[which(its.list[["MN.ITS.ps"]]@sam_data$rotation == 3 & its.list[["MN.ITS.ps"]]@sam_data$year == 22 & its.list[["MN.ITS.ps"]]@sam_data$season == "Summer"),"month"] <- 5
+
+# MI: a similar problem where I had month = 8
+its.list[["MI.ITS.ps"]]@sam_data[which(its.list[["MI.ITS.ps"]]@sam_data$year == 22 & its.list[["MI.ITS.ps"]]@sam_data$season == "Summer"),"month"] <- 7
+# also, one replicate to drop, which was season = NA
+its.list[["MI.ITS.ps"]] <- subset_samples(its.list[["MI.ITS.ps"]], !is.na(season))
+
+# US: all plots are Russet Burbank & Caribou Russet, except 2022 which has microbiome samples for each cultivar
+# B for Burbank and C for Caribou
+its.list[["US.ITS.ps"]]@sam_data[which(its.list[["US.ITS.ps"]]@sam_data$year == 22 & str_detect(rownames(its.list[["US.ITS.ps"]]@sam_data), "-B_")),"cultivar"] <- "Burbank"
+its.list[["US.ITS.ps"]]@sam_data[which(its.list[["US.ITS.ps"]]@sam_data$year == 22 & str_detect(rownames(its.list[["US.ITS.ps"]]@sam_data), "-C_")),"cultivar"] <- "Caribou"
+
+### general cleanup functions
+# month decided to be character, change to numeric 
+for (i in 1:length(its.list)){sample_data(its.list[[i]])$month <- as.numeric(as.character(sample_data(its.list[[i]])$month))}
+
+# add yields and other data from Jim's spreadsheet
+its.list <- map(its.list, merge_with_jim_data)
+
+# now that Jim's data is in, write plot as character for all elements in the list
+for (i in 1:length(its.list)){sample_data(its.list[[i]])$plot <- as.character(as.numeric(sample_data(its.list[[i]])$plot))}
+
+# same for block (omitting 1st element of list- CO- because it has no blocks) 
+for (i in 2:length(its.list)){sample_data(its.list[[i]])$block <- as.character(as.numeric(sample_data(its.list[[i]])$block))}
+
+### site-specific categoricals to add
+# if general_category is fumigated, write Fumigated == TRUE
+for (i in 1:length(its.list)){
+  sample_data(its.list[[i]])$Fumigated <- ifelse(its.list[[i]]@sam_data$general_category == "Fumigated", TRUE, FALSE)}
+
+# if general_category includes the word "Amended", Amended == TRUE
+for (i in 1:length(its.list)){
+  sample_data(its.list[[i]])$Amended <- ifelse(
+    str_detect(its.list[[i]]@sam_data$general_category, "Amended"), TRUE, FALSE)}
+
+#############
+## Here's where I need to recategorize some Amended treatments as Controls because they were just cover crops tilled in
+# ME and ID treatments with amendment == "Green Manure" should be reclassified as controls
+its.list[["ME.ITS.ps"]]@sam_data[which(its.list[["ME.ITS.ps"]]@sam_data$amendment == "Green Manure"),"Amended"] <- FALSE
+its.list[["ID.ITS.ps"]]@sam_data[which(its.list[["ID.ITS.ps"]]@sam_data$amendment == "Green Manure"),"Amended"] <- FALSE
+###########
+
+# if treatment_description include "ustard", Brassica == TRUE
+for (i in 1:length(its.list)){
+  sample_data(its.list[[i]])$Brassica <- ifelse(
+    str_detect(its.list[[i]]@sam_data$treatment_description, "ustard"), TRUE, FALSE)}
+
+# ID green manure treatment contained brassicas, but Jeff and others categorize it as non-Brassica-green manure, so we're leaving it as FALSE.
+
+### Bacteria
+### site-specific sample data curation
+# MI summer month was wrong in 2022
+bact.list[["MI.16S.ps"]]@sam_data[which(bact.list[["MI.16S.ps"]]@sam_data$year == 22 & bact.list[["MI.16S.ps"]]@sam_data$season == "Summer"),"month"] <- 7
+
+# MN: I had written the 60 DAP month of 2022 as 6 June, where Jim had it as 5 May. 
+# This prevented some samples from merging with Jim's data. Correcting it here:
+bact.list[["MN.16S.ps"]]@sam_data[which(bact.list[["MN.16S.ps"]]@sam_data$rotation == 3 & bact.list[["MN.16S.ps"]]@sam_data$year == 22 & bact.list[["MN.16S.ps"]]@sam_data$season == "Summer"),"month"] <- 5
+
+# US: all plots are Russet Burbank & Caribou Russet, except 2022 which has microbiome samples for each cultivar
+# B for Burbank and C for Caribou
+bact.list[["US.16S.ps"]]@sam_data[which(bact.list[["US.16S.ps"]]@sam_data$year == 22 & str_detect(rownames(bact.list[["US.16S.ps"]]@sam_data), "-B_")),"cultivar"] <- "Burbank"
+bact.list[["US.16S.ps"]]@sam_data[which(bact.list[["US.16S.ps"]]@sam_data$year == 22 & str_detect(rownames(bact.list[["US.16S.ps"]]@sam_data), "-C_")),"cultivar"] <- "Caribou"
+
+### general cleanup functions
+# month decided to be character, change to numeric 
+for (i in 1:length(bact.list)){sample_data(bact.list[[i]])$month <- as.numeric(as.character(sample_data(bact.list[[i]])$month))}
+
+# add yields and other data from Jim's spreadsheet
+bact.list <- map(bact.list, merge_with_jim_data)
+
+# now that Jim's data is in, write plot as character for all elements in the list
+for (i in 1:length(bact.list)){sample_data(bact.list[[i]])$plot <- as.character(as.numeric(sample_data(bact.list[[i]])$plot))}
+
+# same for block (omitting 1st element of list- CO- because it has no blocks) 
+for (i in 2:length(bact.list)){sample_data(bact.list[[i]])$block <- as.character(as.numeric(sample_data(bact.list[[i]])$block))}
+
+### site-specific categoricals to add
+# if general_category is fumigated, write Fumigated == TRUE
+for (i in 1:length(bact.list)){
+  sample_data(bact.list[[i]])$Fumigated <- ifelse(bact.list[[i]]@sam_data$general_category == "Fumigated", TRUE, FALSE)}
+
+# if general_category includes the word "Amended", Amended == TRUE
+for (i in 1:length(bact.list)){
+  sample_data(bact.list[[i]])$Amended <- ifelse(
+    str_detect(bact.list[[i]]@sam_data$general_category, "Amended"), TRUE, FALSE)}
+
+#############
+## Here's where I need to recategorize some Amended treatments as Controls because they were just cover crops tilled in
+# ME and ID treatments with amendment == "Green Manure" should be reclassified as controls
+bact.list[["ME.16S.ps"]]@sam_data[which(bact.list[["ME.16S.ps"]]@sam_data$amendment == "Green Manure"),"Amended"] <- FALSE
+bact.list[["ID.16S.ps"]]@sam_data[which(bact.list[["ID.16S.ps"]]@sam_data$amendment == "Green Manure"),"Amended"] <- FALSE
+###########
+
+# if treatment_description include "ustard", Brassica == TRUE
+for (i in 1:length(bact.list)){
+  sample_data(bact.list[[i]])$Brassica <- ifelse(
+    str_detect(bact.list[[i]]@sam_data$treatment_description, "ustard"), TRUE, FALSE)}
+
+# ID green manure treatment contained brassicas, but Jeff and others categorize it as non-Brassica-green manure, so we're leaving it as FALSE.
+
+# write out its and bact.lists
+saveRDS(its.list, file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/its.ps.list")
+saveRDS(bact.list, file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/bact.ps.list")
+```
+
+**Possible irregularities with regard to treatment:**  
+We are considering MI and MN Amended/Fumigated categories as Amended but
+NOT fumigated because they were not fumigated preceding the 2022 growing
+season.  
+CO, ND have different dosages of compost/organic amendments. These were
+all coded as Amended but not differentiated. MI used chloropicrin in
+some fumigation treatments. Coded as Fumigated but not differentiated
+from metam fumigations.  
+I’m not gonna touch different cover crops as they are too unique to each
+specific field site.  
+I know Brassica and Amended are completely counfounded in MN but will
+address this if I need to later.
+
+## Variance partitioning workflow
+
+[Taken from this tutorial
+here](https://bioconductor.org/packages/release/bioc/vignettes/variancePartition/inst/doc/variancePartition.html).
+This ran well just like the tutorial once I updated R (4.3.2) and
+associated packages.
+
+### The basic workflow
+
+``` r
+### Subset ps objects by year 2022 and ASVs by occupancy, and transform with CLR. 
+do_all <- function(ps){
+  ps.out <- ps %>% 
+    subset_samples(year == 22) %>% 
+    drop_ghost_asvs() %>%
+    subset_occupancy() %>% 
+    transform_clr() 
+  return(ps.out)
+}
+# do_all 
+its.list.22 <- map(its.list, do_all)
+```
+
+    ## 1587 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 1467 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 2432 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 3157 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 1965 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 2224 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 2179 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 3418 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 2089 features are kept. 
+    ## Counts transformed with CLR.
+
+``` r
+bact.list.22 <- map(bact.list, do_all)
+```
+
+    ## 23355 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 17420 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 14610 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 22512 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 16349 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 14100 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 19721 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 19986 features are kept. 
+    ## Counts transformed with CLR. 
+    ## 16956 features are kept. 
+    ## Counts transformed with CLR.
+
+``` r
+### write formulas
+# rotation, fumigated, amended, and brassica are fixed effects, while season, cultivar, and plot are random effects 
+# fumigated and amended categories but no brassica (ID, MI, MN)
+formula_noB   <- ~ (1 | block) + (1 | cultivar) + (1 | season) + rotation + Fumigated + Amended 
+# add Brassica for field designs that incorporated them (ME, ND, OR)
+formula_B     <- ~ (1 | block) + (1 | cultivar) + (1 | season) + rotation + Fumigated + Amended + Brassica 
+# omit Fumigated and Brassica (CO)
+formula_CO    <- ~ (1 | cultivar) + (1 | season) + rotation + Amended 
+# Brassica but no fumigation (Larkin)
+formula_US    <- ~ (1 | block) + (1 | cultivar) + (1 | season) + rotation + Amended + Brassica 
+# omit Amended and Brassica (WI)
+formula_WI    <- ~ (1 | block) + (1 | cultivar) + (1 | season) + rotation + Fumigated
+
+### run varianceParition, map it where applicable 
+# ITS
+# singles
+co.its.22.vp <- its.list.22[["CO.ITS.ps"]] %>% variance_partition(formula_CO) 
+wi.its.22.vp <- its.list.22[["WI.ITS.ps"]] %>% variance_partition(formula_WI)
+us.its.22.vp <- its.list.22[["US.ITS.ps"]] %>% variance_partition(formula_US)
+
+# run on lists for brassica and non-brassica models
+its.list.22.noB <- list(its.list.22[["ID.ITS.ps"]], its.list.22[["MI.ITS.ps"]], its.list.22[["MN.ITS.ps"]])
+its.list.22.B <- list(its.list.22[["ME.ITS.ps"]], its.list.22[["ND.ITS.ps"]], its.list.22[["OR.ITS.ps"]])
+noB.list.22.vp <- map(its.list.22.noB, variance_partition, formula_noB)
+B.list.22.vp <- map(its.list.22.B, variance_partition, formula_B)
+
+# 16S
+co.bact.22.vp <- bact.list.22[["CO.16S.ps"]] %>% variance_partition(formula_CO)
+wi.bact.22.vp <- bact.list.22[["WI.16S.ps"]] %>% variance_partition(formula_WI)
+us.bact.22.vp <- bact.list.22[["US.16S.ps"]] %>% variance_partition(formula_US)
+bact.list.22.noB <- list(bact.list.22[["ID.16S.ps"]], bact.list.22[["MI.16S.ps"]], bact.list.22[["MN.16S.ps"]])
+bact.list.22.B <- list(bact.list.22[["ME.16S.ps"]], bact.list.22[["ND.16S.ps"]], bact.list.22[["OR.16S.ps"]])
+noB.bact.list.22.vp <- map(bact.list.22.noB, variance_partition, formula_noB)
+B.bact.list.22.vp <- map(bact.list.22.B, variance_partition, formula_B)
+```
+
+variance_partition returned this warning in the no_B run: Warning:
+convergence code -4 from nloptwrap: NLOPT_ROUNDOFF_LIMITED: Roundoff
+errors led to a breakdown of the optimization algorithm. In this case,
+the returned minimum may still be useful. (e.g. this error occurs in
+NEWUOA if one tries to achieve a tolerance too close to machine
+precision.)
+
+#### plot proportions of variance attributed to each factor across sites
+
+``` r
+# calculate the weighted variance of all factors from ASVs weighted by relative abundance
+co.var <- get_normalized_variance(its.list[["CO.ITS.ps"]], co.its.22.vp)
+```
+
+    ## 1587 features are kept.
+
+``` r
+id.var <- get_normalized_variance(its.list[["ID.ITS.ps"]], noB.list.22.vp[[1]])
+```
+
+    ## 1467 features are kept.
+
+``` r
+me.var <- get_normalized_variance(its.list[["ME.ITS.ps"]], B.list.22.vp[[1]])
+```
+
+    ## 2432 features are kept.
+
+``` r
+mi.var <- get_normalized_variance(its.list[["MI.ITS.ps"]], noB.list.22.vp[[2]])
+```
+
+    ## 3157 features are kept.
+
+``` r
+mn.var <- get_normalized_variance(its.list[["MN.ITS.ps"]], noB.list.22.vp[[3]])
+```
+
+    ## 1965 features are kept.
+
+``` r
+nd.var <- get_normalized_variance(its.list[["ND.ITS.ps"]], B.list.22.vp[[2]])
+```
+
+    ## 2224 features are kept.
+
+``` r
+or.var <- get_normalized_variance(its.list[["OR.ITS.ps"]], B.list.22.vp[[3]])
+```
+
+    ## 2179 features are kept.
+
+``` r
+wi.var <- get_normalized_variance(its.list[["WI.ITS.ps"]], wi.its.22.vp)
+```
+
+    ## 2089 features are kept.
+
+``` r
+us.var <- get_normalized_variance(its.list[["US.ITS.ps"]], us.its.22.vp)
+```
+
+    ## 3418 features are kept.
+
+``` r
+# now bind them together nicely
+var.df <- data.frame(me.var,
+             co.var = co.var[names(me.var)],
+             id.var = id.var[names(me.var)],
+             mi.var = mi.var[names(me.var)],
+             mn.var = mn.var[names(me.var)],
+             nd.var = nd.var[names(me.var)],
+             or.var = or.var[names(me.var)],
+             wi.var = wi.var[names(me.var)],
+             us.var = us.var[names(me.var)])
+
+# i'm not happy about the aesthetics of my coding tonight, but i'm gonna push on
+
+# rename factor by what I want to plot as
+var.df$factor <- c("Block", "Cultivar", "Season", "Rotation", "Fumigation", "Amendment", "Brassica", "Residuals")
+
+# overwrite site.var with field site IDs
+colnames(var.df) <- c("ME1", "CO", "ID", "MI", "MN1", "MN2", "OR", "WI", "ME2", "factor")
+
+# pivot longer
+var.df.l <- pivot_longer(var.df, -factor, names_to = "site", values_to = "variance_pct")
+
+# order factors
+var.df.l$factor <- factor(var.df.l$factor, levels = c("Amendment", "Brassica", "Fumigation", 
+                                                      "Block", "Cultivar", "Season", "Rotation", "Residuals"))
+# color palette
+factorpalette <- c('#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69', 'gray')
+
+# plot
+ggplot(var.df.l, aes(site, variance_pct, fill = factor))+
+  geom_bar(position = "stack", stat = "identity")+
+  scale_x_discrete("field site")+
+  scale_y_continuous("% variance in ITS")+
+  scale_fill_manual("", values = factorpalette)+
+  theme_bw()
+```
+
+    ## Warning: Removed 9 rows containing missing values or values outside the scale range
+    ## (`geom_bar()`).
+
+![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+``` r
+### 16S
+# calculate the weighted variance of all factors from ASVs weighted by relative abundance
+co.bact.var <- get_normalized_variance(bact.list[["CO.16S.ps"]], co.bact.22.vp)
+```
+
+    ## 23355 features are kept.
+
+``` r
+id.bact.var <- get_normalized_variance(bact.list[["ID.16S.ps"]], noB.bact.list.22.vp[[1]])
+```
+
+    ## 17420 features are kept.
+
+``` r
+me.bact.var <- get_normalized_variance(bact.list[["ME.16S.ps"]], B.bact.list.22.vp[[1]])
+```
+
+    ## 14610 features are kept.
+
+``` r
+mi.bact.var <- get_normalized_variance(bact.list[["MI.16S.ps"]], noB.bact.list.22.vp[[2]])
+```
+
+    ## 22512 features are kept.
+
+``` r
+mn.bact.var <- get_normalized_variance(bact.list[["MN.16S.ps"]], noB.bact.list.22.vp[[3]])
+```
+
+    ## 16349 features are kept.
+
+``` r
+nd.bact.var <- get_normalized_variance(bact.list[["ND.16S.ps"]], B.bact.list.22.vp[[2]])
+```
+
+    ## 14100 features are kept.
+
+``` r
+or.bact.var <- get_normalized_variance(bact.list[["OR.16S.ps"]], B.bact.list.22.vp[[3]])
+```
+
+    ## 19721 features are kept.
+
+``` r
+wi.bact.var <- get_normalized_variance(bact.list[["WI.16S.ps"]], wi.bact.22.vp)
+```
+
+    ## 16956 features are kept.
+
+``` r
+us.bact.var <- get_normalized_variance(bact.list[["US.16S.ps"]], us.bact.22.vp)
+```
+
+    ## 19986 features are kept.
+
+``` r
+# now bind them together nicely
+bact.var.df <- data.frame(me.bact.var,
+             co.bact.var = co.bact.var[names(me.bact.var)],
+             id.bact.var = id.bact.var[names(me.bact.var)],
+             mi.bact.var = mi.bact.var[names(me.bact.var)],
+             mn.bact.var = mn.bact.var[names(me.bact.var)],
+             nd.bact.var = nd.bact.var[names(me.bact.var)],
+             or.bact.var = or.bact.var[names(me.bact.var)],
+             wi.bact.var = wi.bact.var[names(me.bact.var)],
+             us.bact.var = us.bact.var[names(me.bact.var)])
+
+# rename factor by what I want to plot as
+bact.var.df$factor <- c("Block", "Cultivar", "Season", "Rotation", "Fumigation", "Amendment", "Brassica", "Residuals")
+
+# overwrite site.var with field site IDs
+colnames(bact.var.df) <- c("ME1", "CO", "ID", "MI", "MN1", "MN2", "OR", "WI", "ME2", "factor")
+
+# pivot longer
+bact.var.df.l <- pivot_longer(bact.var.df, -factor, names_to = "site", values_to = "variance_pct")
+
+# order factors
+bact.var.df.l$factor <- factor(bact.var.df.l$factor, levels = c("Amendment", "Brassica", "Fumigation", 
+                                                      "Block", "Cultivar", "Season", "Rotation", "Residuals"))
+
+# plot
+ggplot(bact.var.df.l, aes(site, variance_pct, fill = factor))+
+  geom_bar(position = "stack", stat = "identity")+
+  scale_x_discrete("field site")+
+  scale_y_continuous("% variance in 16S")+
+  scale_fill_manual("", values = factorpalette)+
+  theme_bw()
+```
+
+    ## Warning: Removed 9 rows containing missing values or values outside the scale range
+    ## (`geom_bar()`).
+
+![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-6-2.png)<!-- -->
+
+``` r
+# export variance df out
+var.df.l$amplicon <- "ITS" # add amplicons
+bact.var.df.l$amplicon <- "16S" 
+all.var.df.l <- rbind(var.df.l, bact.var.df.l) # bind together
+write_csv(all.var.df.l, file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/variance.by.factor.csv")
+```
+
+Different cover crops might be responsible for some of the plot
+variance. This might justify re-coding different cover crop regimes used
+as random effects, but it could be a time suck. Sufficient to mention
+“Plot may confound with different cover crops, particularly in ME where
+they used a high variety of them?” in manuscript results/discussion?
+
+Better yet, rerun by block to disentangle spatial variance from any
+cover cropping effects confounded with plot (for all fields except CO,
+which didn’t have block). This will allow us to better use the
+randomized complete block design.
+
+Likewise, separate fields were used for different rotations in different
+sites, so in these cases rotation is completely confounded with field.
+
+#### plot trends across taxa
+
+Minnesota ITS as an example
+
+``` r
+# plot the first 50 ASVs by all factors of variance
+plotPercentBars(noB.list.22.vp[[3]][1:50,]) 
+```
+
+![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+``` r
+### plot which phyla are most affected by fumigation
+mn.var.asvs <- merge(noB.list.22.vp[[3]], its.list.22[["MN.ITS.ps"]]@tax_table, by = 0) # bind variance with taxonomy
+colnames(mn.var.asvs)[1] <- "ASV" # add ASVs into the dataframe
+mn.var.asvs <- mn.var.asvs %>% arrange(-FumigatedTRUE) # sort by fumigation-influenced
+
+# confirm by plotting relative abundances
+fumigatedtrueasvs <- mn.var.asvs$ASV[1:10]
+
+# plot biomarkers
+plot_biomarkers(its.list[["MN.ITS.ps"]], fumigatedtrueasvs, "Phylum")+
+  facet_grid(~Fumigated, scales = "free", space = "free")+
+  scale_x_discrete("")+scale_y_continuous("% ITS community abundance")+
+  theme_bw()+
+  theme(legend.position = "bottom", axis.text.x = element_blank())
+```
+
+    ## 1965 features are kept.
+
+    ## Scale for y is already present.
+    ## Adding another scale for y, which will replace the existing scale.
+
+![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
+
+1)  Variance in the relative abundance of the top 50 ASVs is attributed
+    to different factors in different proportions.
+
+2)  Of the top 10 ASVs most influenced by fumigation, seven are
+    Chytrids. But this first plot does not tell whether they are
+    positively or negatively affected. Remember the y axis shows
+    proportion of variance explained, not relative abundance.
+
+3)  Chytrids increase after fumigation. The members of Ascomycota were a
+    little less variant by fumigation, but higher in abundance.
+
+#### bind variance-partition objects as lists and write out
+
+``` r
+### ITS
+# make a list of all variance-partition objects
+all.its.22.vp.list <- list(co.its.22.vp, noB.list.22.vp[[1]], B.list.22.vp[[1]],  
+                           noB.list.22.vp[[2]], noB.list.22.vp[[3]], B.list.22.vp[[2]],
+                           B.list.22.vp[[3]], us.its.22.vp, wi.its.22.vp)
+# add names by site
+names(all.its.22.vp.list) <- c("CO", "ID", "ME1", "MI", "MN1", "MN2", "OR", "ME2", "WI")
+
+# save the list
+saveRDS(all.its.22.vp.list, file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/its.variances.list")
+
+### 16S
+# make a list of all variance-partition objects
+all.bact.22.vp.list <- list(co.bact.22.vp, noB.bact.list.22.vp[[1]], B.bact.list.22.vp[[1]],  
+                           noB.bact.list.22.vp[[2]], noB.bact.list.22.vp[[3]], B.bact.list.22.vp[[2]],
+                           B.bact.list.22.vp[[3]], us.bact.22.vp, wi.bact.22.vp)
+
+# add names by site
+names(all.bact.22.vp.list) <- c("CO", "ID", "ME1", "MI", "MN1", "MN2", "OR", "ME2", "WI")
+
+# save the list
+saveRDS(all.bact.22.vp.list, file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/bact.variances.list")
+```
+
+## Investigate how mean percent abundance or occupancy vary with treatment-variance
+
+This chunk runs interactively, but not in knit. I don’t know what else
+to say.
+
+``` r
+### Subset ps objects by year 2022 and ASVs by occupancy, 
+### and then get mean percent abundance and occupancy of each ASV. 
+do_most <- function(ps){
+  ps.out <- ps %>% 
+    subset_samples(year == 22) %>% 
+    drop_ghost_asvs() %>%
+    transform_sample_counts(function(x) x / sum(x) * 100) %>% 
+    subset_occupancy() 
+  return(ps.out)
+}
+its.22.ps.list <- map(its.list, do_most)
+bact.22.ps.list <- map(bact.list, do_most)
+
+add_abund_and_occ_to_var <- function(ps, var){
+  
+  # calculate percent abundance
+  pct_abunds <- colSums(ps@otu_table)/nrow(ps@otu_table)
+  
+  # calculate occupancy of each ASV (proportion of samples detected in, from 0 to 1)
+  occ <- vector("numeric")
+    for (i in 1:ncol(ps@otu_table)) {
+      occ[i] <- sum(ps@otu_table[,i] != 0)/nrow(ps@otu_table[,i])
+    }
+  # write ASV names
+  names(occ) <- colnames(ps@otu_table)
+  
+  # import abundance and occupancy into the variance dataframe, and return it
+  var$mean_pct_abundance <- pct_abunds
+  var$occupancy <- occ
+  return(var) 
+}
+
+# get abundance and occupancy of all ASVs and write into a list 
+its.22.var.abund.occ.list <- pmap(list(its.22.ps.list, all.its.22.vp.list), add_abund_and_occ_to_var)
+bact.22.var.abund.occ.list <- pmap(list(bact.22.ps.list, all.bact.22.vp.list), add_abund_and_occ_to_var)
+
+# fix list names
+names(its.22.var.abund.occ.list) <- str_sub(names(its.22.var.abund.occ.list), 1, 2)
+names(bact.22.var.abund.occ.list) <- str_sub(names(bact.22.var.abund.occ.list), 1, 2)
+
+# add ASVs from rownames
+for (i in 1:length(its.22.var.abund.occ.list)) {
+      its.22.var.abund.occ.list[[i]]$ASV <- rownames(its.22.var.abund.occ.list[[i]])
+    }
+for (i in 1:length(bact.22.var.abund.occ.list)) {
+      bact.22.var.abund.occ.list[[i]]$ASV <- rownames(bact.22.var.abund.occ.list[[i]])
+    }
+
+# add state info
+for (i in 1:length(its.22.var.abund.occ.list)) {
+      its.22.var.abund.occ.list[[i]]$site <- names(its.22.var.abund.occ.list)[[i]]
+    }
+for (i in 1:length(bact.22.var.abund.occ.list)) {
+      bact.22.var.abund.occ.list[[i]]$site <- names(bact.22.var.abund.occ.list)[[i]]
+    }
+
+# then bind rows together and drop the now-useless rownames
+its.22.var.abund.occ.df <- do.call(bind_rows, lapply(its.22.var.abund.occ.list, as.data.frame))
+rownames(its.22.var.abund.occ.df) <- NULL
+bact.22.var.abund.occ.df <- do.call(bind_rows, lapply(bact.22.var.abund.occ.list, as.data.frame))
+rownames(bact.22.var.abund.occ.df) <- NULL
+
+# reorder colnames of the whole schlemiel
+its.22.var.abund.occ.df <- its.22.var.abund.occ.df %>% dplyr::select(site, ASV, mean_pct_abundance, occupancy, 
+                                          AmendedTRUE, FumigatedTRUE, BrassicaTRUE, cultivar, season, rotation, block, Residuals)
+bact.22.var.abund.occ.df <- bact.22.var.abund.occ.df %>% dplyr::select(site, ASV, mean_pct_abundance, occupancy, 
+                                          AmendedTRUE, FumigatedTRUE, BrassicaTRUE, cultivar, season, rotation, block, Residuals)
+
+# write out
+write_csv(its.22.var.abund.occ.df, file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/ITS.ASV.abund.occ.var.all.sites.csv")
+write_csv(bact.22.var.abund.occ.df, file = "/Users/klas0061/Desktop/UMN/treatment_variance_modeling/16S.ASV.abund.occ.var.all.sites.csv")
+```
+
+## ASVs impacted by treatments
+
+See next document for better/updated visuals
+
+#### Amended
+
+``` r
+# extract variances of ASVs by amendment, from all relevant sites (not WI)
+amended.df <- plyr::ldply(all.its.22.vp.list[c(1:7,9)], 
+                          function(df) data.frame("ASV" = rownames(df), df$AmendedTRUE))
+
+# retitle site and variance colnames
+colnames(amended.df)[c(1,3)] <- c("site", "variance")
+
+# for each ASV, calculate the sum variance, number of sites it is detected in, and mean variance across sites
+amended.df <- amended.df %>% 
+  group_by(ASV) %>% 
+  dplyr::mutate(sum_var = sum(variance),
+                num_sites = length(unique(site)),
+                mean_var = sum_var / num_sites)
+
+## plot
+amended.df$site <- factor(amended.df$site, levels = c("OR", "ID", "CO", "MN1", "MN2", "WI", "MI", "ME1", "ME2"))
+amend.gg <- amended.df %>% 
+  filter(mean_var > 0.10 & num_sites > 1) %>% 
+  mutate(ASV = fct_reorder(ASV, desc(num_sites))) %>%
+    ggplot(aes(site, ASV, fill = variance))+
+      scale_x_discrete("")+
+      scale_fill_viridis_c("Proportion of \n Amendment-associated \n variance", option = "viridis")+
+      geom_tile()+theme_bw()+
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+amend.gg
+```
+
+Notes on these plots: Amended: I used my add_taxa() function to plot
+amendment-associated ASVs by Genus, and there was only one that
+contained several ASVs: Kernia. All were sp. columnaris. Also notable
+were Mortierella, Acaulium, Botryotrichum, and Chytrids.
+
+#### Fumigated
+
+``` r
+# extract variances of ASVs by fumigated, from all relevant sites (not CO or US)
+fumigated.df <- plyr::ldply(all.its.22.vp.list[c(2:8)], 
+                          function(df) data.frame("ASV" = rownames(df), df$FumigatedTRUE))
+
+# retitle site and variance colnames
+colnames(fumigated.df)[c(1,3)] <- c("site", "variance")
+
+# for each ASV, calculate the sum variance, number of sites it is detected in, and mean variance across sites
+fumigated.df <- fumigated.df %>% 
+  group_by(ASV) %>% 
+  dplyr::mutate(sum_var = sum(variance),
+                num_sites = length(unique(site)),
+                mean_var = sum_var / num_sites)
+
+## plot
+fumigated.df$site <- factor(fumigated.df$site, levels = c("OR", "ID", "CO", "MN1", "MN2", "WI", "MI", "ME1", "ME2"))
+fum.gg <- fumigated.df %>% 
+  filter(mean_var > 0.10 & num_sites > 1) %>% 
+  mutate(ASV = fct_reorder(ASV, desc(num_sites))) %>%
+    ggplot(aes(site, ASV, fill = variance))+
+      scale_x_discrete("")+
+      scale_fill_viridis_c("Proportion of \n Fumigation-associated \n variance", option = "viridis")+
+      geom_tile()+theme_bw()+
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+fum.gg
+```
+
+I can see some regional groupings here: MN/WI, and MI/ME1.
+
+#### Brassica
+
+``` r
+# extract variances of ASVs by brassica, from all relevant sites (ID, ME1, ME2, MN2, OR)
+brassica.df <- plyr::ldply(all.its.22.vp.list[c(2:3,6:7,9)], 
+                          function(df) data.frame("ASV" = rownames(df), df$BrassicaTRUE))
+
+# retitle site and variance colnames
+colnames(brassica.df)[c(1,3)] <- c("site", "variance")
+
+# for each ASV, calculate the sum variance, number of sites it is detected in, and mean variance across sites
+brassica.df <- brassica.df %>% 
+  group_by(ASV) %>% 
+  dplyr::mutate(sum_var = sum(variance),
+                num_sites = length(unique(site)),
+                mean_var = sum_var / num_sites)
+
+## plot
+brassica.df$site <- factor(brassica.df$site, levels = c("OR", "ID", "CO", "MN1", "MN2", "WI", "MI", "ME1", "ME2"))
+brass.gg <- brassica.df %>% 
+  filter(mean_var > 0.10 & num_sites > 1) %>% 
+  mutate(ASV = fct_reorder(ASV, desc(num_sites))) %>%
+    ggplot(aes(site, ASV, fill = variance))+
+      scale_x_discrete("")+
+      scale_fill_viridis_c("Proportion of \n Brassica-associated \n variance", option = "viridis")+
+      geom_tile()+theme_bw()+
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+brass.gg
+```
+
+Brassica influenced taxa in Oregon far more in the other sites,
+particularly members of Tausonia (sp. pullulans), Plectosphaerella,
+Coelastrella, and Mortierella. Several of these Brassica-influenced ASVs
+are distributed across all, or most, sites where there were Brassica
+treatments.
+
+#### rotation
+
+``` r
+# extract variances of ASVs by rotation, from all sites 
+rotation.df <- plyr::ldply(all.its.22.vp.list, 
+                          function(df) data.frame("ASV" = rownames(df), df$rotation))
+
+# retitle site and variance colnames
+colnames(rotation.df)[c(1,3)] <- c("site", "variance")
+
+# for each ASV, calculate the sum variance, number of sites it is detected in, and mean variance across sites
+rotation.df <- rotation.df %>% 
+  group_by(ASV) %>% 
+  dplyr::mutate(sum_var = sum(variance),
+                num_sites = length(unique(site)),
+                mean_var = sum_var / num_sites)
+
+## plot
+rotation.df$site <- factor(rotation.df$site, levels = c("OR", "ID", "CO", "MN1", "MN2", "WI", "MI", "ME1", "ME2"))
+rot.gg <- rotation.df %>% 
+  filter(mean_var > 0.10 & num_sites > 1) %>% 
+  mutate(ASV = fct_reorder(ASV, desc(num_sites))) %>%
+    ggplot(aes(site, ASV, fill = variance))+
+      scale_x_discrete("")+
+      scale_fill_viridis_c("Proportion of \n rotation-associated \n variance", option = "viridis")+
+      geom_tile()+theme_bw()+
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+rot.gg
+```
+
+Rotation is a bit harder to interpret…
+
+## Appendix
+
+## Some notes about the workflow
+
+I don’t understand why the correlation between Fumigated and Amended is
+0.49 when they contain completely different samples. Is it because this
+correlation scale goes from 0 to 1 instead of -1 to 1?
+
+The tutorial explains: “Statistically, let rho be the array of
+correlation values returned by the standard R function cancor to compute
+CCA. canCorPairs() returns rho / sum(rho) which is the fraction of the
+maximum possible correlation”.
+
+Categorical variables ALL must be modeled as either fixed or random: no
+mixing and matching.
+
+Before I developed get_normalized_variance(), I noticed that the more
+stringently I dropped ASVs using subset_occupancy(), the more variance
+was attributable to non-residual factors. Pretty sure this is because
+the ASVs with really low occupance were not present in enough samples to
+detect any meaningful non-stochastic variation (a few exceptions: ASVs
+that were found in one plot only). Basically, once I implemented
+get_normalized_variance(), I noticed the variance apportioned to
+different factors changed a lot less based on subsetting at different
+occupancy thresholds. Basically, the amount of variance attributed to
+different factors did not decrease as more ASVs were retained in the
+phyloseq object.
+
+#### correlation analysis
+
+``` r
+### are vars correlated?
+# this computes/graphs a CCA between all pairs of variables
+mn.corr <- canCorPairs(formula_noB, data.frame(its.list.22[["MN.ITS.ps"]]@sam_data))
+plotCorrMatrix(mn.corr)
+```
+
+![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+
+``` r
+mn.corr
+```
+
+    ##                block   cultivar       season     rotation   Fumigated
+    ## block     1.00000000 0.02771240 0.0451231592 0.0451231592 0.036300845
+    ## cultivar  0.02771240 1.00000000 0.0196881080 0.0196881080 0.361516887
+    ## season    0.04512316 0.01968811 1.0000000000 0.0441888620 0.000647682
+    ## rotation  0.04512316 0.01968811 0.0441888620 1.0000000000 0.000647682
+    ## Fumigated 0.03630084 0.36151689 0.0006476820 0.0006476820 1.000000000
+    ## Amended   0.04193418 0.35735833 0.0003195515 0.0003195515 0.493377191
+    ##                Amended
+    ## block     0.0419341799
+    ## cultivar  0.3573583276
+    ## season    0.0003195515
+    ## rotation  0.0003195515
+    ## Fumigated 0.4933771910
+    ## Amended   1.0000000000
+
+``` r
+# check some other sites
+canCorPairs(formula_noB, data.frame(its.list.22[["MI.ITS.ps"]]@sam_data))
+```
+
+    ##                block   cultivar     season   rotation  Fumigated    Amended
+    ## block     1.00000000 0.04008045 0.07943742 0.07296424 0.04418434 0.03102022
+    ## cultivar  0.04008045 1.00000000 0.04093327 0.02942573 0.73241943 0.51674658
+    ## season    0.07943742 0.04093327 1.00000000 0.04450016 0.02632404 0.01857250
+    ## rotation  0.07296424 0.02942573 0.04450016 1.00000000 0.04417293 0.03116549
+    ## Fumigated 0.04418434 0.73241943 0.02632404 0.04417293 1.00000000 0.70553368
+    ## Amended   0.03102022 0.51674658 0.01857250 0.03116549 0.70553368 1.00000000
+
+#### Justification for get_normalized_variance() function
+
+I notice the most abundant ASVs (overall, by number) are generally more
+influenced by non-residual factors. Well, one way to lie with statistics
+would be to omit more ASVs before running the variance partitioning, so
+I could show that each factor explains more variance. So, is there a
+negative relationship between an ASV’s mean abundance and the amount of
+variance explained by residuals?
+
+``` r
+meanclr <- colSums(its.list.22[["MN.ITS.ps"]]@otu_table)/nrow(its.list.22[["MN.ITS.ps"]]@otu_table)
+df <- merge(noB.list.22.vp[[2]], data.frame(meanclr), by = 'row.names') 
+ggplot(df, aes(meanclr, Residuals))+geom_point(size = 0.2)
+```
+
+![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+Kinda yeah, but the effect seems to be binary: low-abundance ASVs vs
+more prominent ones. Maybe this justifies a more stringent occupancy
+cutoff. **Or, by weighting variance by ASV relative abundance**. Once I
+weighted variance by relative abundance, the amount of variance from
+each factor did not change nearly as much. (Crucially and more
+specifically, it did not increase with the number of ASVs I omitted).
+
+#### Distributions of variance across ASVs
+
+``` r
+hist(noB.list.22.vp[[3]] %>% pull(FumigatedTRUE), breaks = 100, 
+     main = "MN1 ITS ASVs", xlab = "fraction of variance from AmendedTRUE", ylab = "ASV count")
+```
+
+![](39_variance_partitioning_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+There does not seem to be a good cutoff point for determining how much
+variance should categorize an ASV as “differentially distributed” across
+any of these factors here.
+
+## Conclusion
+
+We can use variance partitioning to examine how much of the variance in
+microbiome composition was attributed to certain treatment effects
+(organic amendments, fumigation, brassica application, or rotation) and
+also random effects like block, season, and cultivar. Different fields
+are different, although residuals explained the highest proportion of
+variance for all sites. Certain taxa appeared to be associated with
+certain treatments in a site-dependent way.
+
+Could do more follow-ups relating variance from any treatment to percent
+abundance. For example: are brassica-associated taxa in OR simply more
+abundant than at the other sites, or could it be that OR used a more
+effective brassica treatment? Could plot percent abundances of these
+taxa across the 4 years to see if there are multi-year trends.
+
+Additionally, we could look at Genus or other taxonomic levels.
+
+#### session info
+
+``` r
+sessionInfo()
+```
+
+    ## R version 4.3.2 (2023-10-31)
+    ## Platform: aarch64-apple-darwin20 (64-bit)
+    ## Running under: macOS Sonoma 14.4.1
+    ## 
+    ## Matrix products: default
+    ## BLAS:   /Library/Frameworks/R.framework/Versions/4.3-arm64/Resources/lib/libRblas.0.dylib 
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/4.3-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.11.0
+    ## 
+    ## locale:
+    ## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+    ## 
+    ## time zone: America/Chicago
+    ## tzcode source: internal
+    ## 
+    ## attached base packages:
+    ## [1] stats     graphics  grDevices utils     datasets  methods   base     
+    ## 
+    ## other attached packages:
+    ##  [1] compositions_2.0-8       variancePartition_1.32.2 BiocParallel_1.36.0     
+    ##  [4] limma_3.58.1             NatParksPalettes_0.2.0   patchwork_1.2.0         
+    ##  [7] speedyseq_0.5.3.9018     phyloseq_1.46.0          lubridate_1.9.3         
+    ## [10] forcats_1.0.0            stringr_1.5.1            dplyr_1.1.4             
+    ## [13] purrr_1.0.2              readr_2.1.5              tidyr_1.3.0             
+    ## [16] tibble_3.2.1             ggplot2_3.5.0            tidyverse_2.0.0         
+    ## 
+    ## loaded via a namespace (and not attached):
+    ##   [1] Rdpack_2.6              bitops_1.0-7            permute_0.9-7          
+    ##   [4] rlang_1.1.3             magrittr_2.0.3          ade4_1.7-22            
+    ##   [7] matrixStats_1.2.0       compiler_4.3.2          mgcv_1.9-1             
+    ##  [10] vctrs_0.6.5             reshape2_1.4.4          pkgconfig_2.0.3        
+    ##  [13] crayon_1.5.2            fastmap_1.1.1           backports_1.4.1        
+    ##  [16] XVector_0.42.0          labeling_0.4.3          caTools_1.18.2         
+    ##  [19] utf8_1.2.4              rmarkdown_2.25          tzdb_0.4.0             
+    ##  [22] nloptr_2.0.3            bit_4.0.5               xfun_0.41              
+    ##  [25] zlibbioc_1.48.0         GenomeInfoDb_1.38.8     jsonlite_1.8.8         
+    ##  [28] biomformat_1.30.0       EnvStats_2.8.1          highr_0.10             
+    ##  [31] remaCor_0.0.16          rhdf5filters_1.14.1     Rhdf5lib_1.24.1        
+    ##  [34] broom_1.0.5             parallel_4.3.2          cluster_2.1.6          
+    ##  [37] R6_2.5.1                stringi_1.8.3           boot_1.3-28.1          
+    ##  [40] numDeriv_2016.8-1.1     Rcpp_1.0.12             iterators_1.0.14       
+    ##  [43] knitr_1.45              IRanges_2.36.0          Matrix_1.6-5           
+    ##  [46] splines_4.3.2           igraph_2.0.3            timechange_0.2.0       
+    ##  [49] tidyselect_1.2.0        rstudioapi_0.15.0       yaml_2.3.8             
+    ##  [52] vegan_2.6-4             gplots_3.1.3.1          codetools_0.2-19       
+    ##  [55] lmerTest_3.1-3          lattice_0.22-5          plyr_1.8.9             
+    ##  [58] Biobase_2.62.0          withr_3.0.0             evaluate_0.23          
+    ##  [61] survival_3.5-7          bayesm_3.1-6            Biostrings_2.70.3      
+    ##  [64] pillar_1.9.0            tensorA_0.36.2.1        KernSmooth_2.23-22     
+    ##  [67] foreach_1.5.2           stats4_4.3.2            generics_0.1.3         
+    ##  [70] vroom_1.6.5             RCurl_1.98-1.14         S4Vectors_0.40.2       
+    ##  [73] hms_1.1.3               munsell_0.5.0           scales_1.3.0           
+    ##  [76] aod_1.3.3               minqa_1.2.6             gtools_3.9.5           
+    ##  [79] RhpcBLASctl_0.23-42     glue_1.7.0              tools_4.3.2            
+    ##  [82] fANCOVA_0.6-1           robustbase_0.99-2       data.table_1.14.10     
+    ##  [85] lme4_1.1-35.1           mvtnorm_1.2-4           rhdf5_2.46.1           
+    ##  [88] grid_4.3.2              ape_5.7-1               rbibutils_2.2.16       
+    ##  [91] colorspace_2.1-0        nlme_3.1-164            GenomeInfoDbData_1.2.11
+    ##  [94] cli_3.6.2               fansi_1.0.6             corpcor_1.6.10         
+    ##  [97] DEoptimR_1.1-3          gtable_0.3.4            digest_0.6.34          
+    ## [100] BiocGenerics_0.48.1     pbkrtest_0.5.2          farver_2.1.1           
+    ## [103] htmltools_0.5.7         multtest_2.58.0         lifecycle_1.0.4        
+    ## [106] statmod_1.5.0           bit64_4.0.5             MASS_7.3-60.0.1
