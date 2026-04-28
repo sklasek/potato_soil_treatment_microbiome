@@ -4,7 +4,7 @@ Authors: Scott A. Klasek, James E. Crants, Brenda K. Schroeder, Kenneth E. Frost
 
 This work is part of the [Potato Soil Health Project](https://potatosoilhealth.cfans.umn.edu/), administered by the University of Minnesota and funded by the USDA National Institute of Food and Agriculture [Specialty Crops Research Initiative (SCRI)](https://www.nifa.usda.gov/grants/funding-opportunities/specialty-crop-research-initiative).   
 
-The manuscript associated with this archived repository is currently under review.  
+The manuscript associated with this archived repository is now published in [PeerJ, available here](https://peerj.com/articles/20595/).  
 For additional context on soil microbiomes across this study system, please see our [Phytobiomes manuscript from 2024](https://doi.org/10.1094/PBIOMES-07-23-0060-R) and [its associated page](https://sklasek.github.io/potato_soil_patterns/).  
 
 **Sequence Data Availability:**    
